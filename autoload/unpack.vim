@@ -153,24 +153,23 @@ function! s:clone(name)
       call mkdir(l:dir, 'p')
     endif
     let l:Post = type(l:spec['post-install'] ==# 2) ? l:spec['post-install'] : {_ -> 0}
-    let l:Echom = function('unpack#ui#echom')
-    let l:Echom_err = function('unpack#ui#echom_err')
+    let l:Update = function('unpack#ui#update')
     if empty(l:spec.branch) && empty(l:spec.commit)
       let l:cmd = ['git', '-C', l:dir, 'clone', l:spec.path]
-      call unpack#job#start(l:cmd, l:Echom, l:Echom_err, l:Post)
+      call unpack#job#start(a:name, l:cmd, {->0}, l:Update, l:Post)
     elseif !empty(l:spec.commit) && !empty(l:spec.branch)
       let l:cmd1 = ['git', '-C', l:dir, 'clone', '-b', l:spec.branch, l:spec.path]
       let l:cmd2 = ['git', '-C', unpack#platform#join(l:dir, a:name), 'checkout', l:spec.commit]
-      call unpack#job#start(l:cmd1, l:Echom, l:Echom_err, {->
-         \ unpack#job#start(l:cmd2, l:Echom, l:Echom_err, l:Post)})
+      call unpack#job#start(a:name, l:cmd1, {->0}, l:Update, {->
+         \ unpack#job#start(a:name, l:cmd2, {->0}, l:Update, l:Post)})
     elseif !empty(l:spec.commit)
       let l:cmd1 = ['git', '-C', l:dir, 'clone', l:spec.path]
       let l:cmd2 = ['git', '-C', unpack#platform#join(l:dir, a:name), 'checkout', l:spec.commit]
-      call unpack#job#start(l:cmd1, l:Echom, l:Echom_err, {->
-         \ unpack#job#start(l:cmd2, l:Echom, l:Echom_err, l:Post)})
+      call unpack#job#start(a:name, l:cmd1, {->0}, l:Update, {->
+         \ unpack#job#start(a:name, l:cmd2, {->0}, l:Update, l:Post)})
     else
       let l:cmd = ['git', '-C', l:dir, 'clone', '-b', l:spec.branch, l:spec.path]
-      call unpack#job#start(l:cmd, l:Echom, l:Echom_err, l:Post)
+      call unpack#job#start(a:name, l:cmd, {->0}, l:Update, l:Post)
     endif
   endif
 endfunction
@@ -179,12 +178,11 @@ endfunction
 function! s:fetch(name)
   let l:spec = s:configuration.packages[a:name]
   let l:dir = s:is_optional(a:name) ? unpack#platform#opt_path() : unpack#platform#start_path()
-  let l:Echom = function('unpack#ui#echom')
-  let l:Echom_err = function('unpack#ui#echom_err')
+  let l:Update = function('unpack#ui#update')
   let l:cmd = ['git', '-C', unpack#platform#join(l:dir, a:name), 'fetch']
   " TODO: only run post-install if something changed
   let l:Post = type(l:spec['post-install'] ==# 2) ? l:spec['post-install'] : {_ -> 0}
-  call unpack#job#start(l:cmd, l:Echom, l:Echom_err, l:Post)
+  call unpack#job#start(a:name, l:cmd, {->0}, l:Update, l:Post)
 endfunction
 
 function! unpack#list()
@@ -231,6 +229,7 @@ function! s:install(name)
 endfunction
 
 function! unpack#install(...)
+  call unpack#ui#new_window()
   call s:for_each_package_do(function('s:install'), a:000)
 endfunction
 
@@ -252,6 +251,7 @@ function! s:remove_package_if_not_in_list(base_path)
 endfunction
 
 function! unpack#update(...)
+  call unpack#ui#new_window()
   call s:for_each_package_do(function('s:fetch'), a:000)
 endfunction
 

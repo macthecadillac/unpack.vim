@@ -1,12 +1,17 @@
-function! unpack#job#start(cmd, out_cb, err_cb, exit_cb)
+let s:line_offset = 0
+
+function! unpack#job#start(name, cmd, out_cb, err_cb, exit_cb)
   let l:state = {
         \ 'out_cb': a:out_cb,
         \ 'err_cb': a:err_cb,
         \ 'exit_cb': a:exit_cb,
+        \ 'name': a:name,
+        \ 'line_offset': s:line_offset,
         \ 'stdout': [],
         \ 'stderr': [],
         \ 'error': v:false
         \ }
+  let s:line_offset += 1
   if has('nvim')  " neovim
     let l:job = {
           \ 'on_stdout': function('s:nvim_stdout'),
@@ -44,7 +49,7 @@ endfunction
 
 function! s:vim_stderr(channel, data)
   let l:job = g:unpack#jobs[l:job_id]
-  call l:job.err_cb(a:data)
+  call l:job.err_cb(l:job.line_offset, l:job.name, a:data)
   let l:job.error = v:true
   call add(l:job.stderr, a:data)
 endfunction
@@ -61,14 +66,19 @@ endfunction
 
 function! s:nvim_stderr(job_id, data, event) dict
   let l:job = g:unpack#jobs[a:job_id]
-  call l:job.err_cb(a:data)
+  call l:job.err_cb(l:job.line_offset, l:job.name, a:data)
   let l:job.error = v:true
   call add(l:job.stderr, a:data)
 endfunction
 
 function! s:nvim_job_exit(job_id, data, event) dict
-  if !g:unpack#jobs[a:job_id].error
-    call g:unpack#jobs[a:job_id].exit_cb()
+  let l:job = g:unpack#jobs[a:job_id]
+  if !l:job.error
+    call l:job.exit_cb()
   endif
+  call unpack#ui#update(l:job.line_offset, l:job.name, ['Done'])
   unlet g:unpack#jobs[a:job_id]
+  if empty(g:unpack#jobs)
+    call unpack#ui#prepare_to_exit()
+  endif
 endfunction
