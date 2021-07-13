@@ -1,11 +1,10 @@
-" TODO: handle Windows (use unpack#platform#cmd)
 function! unpack#job#start(cmd, out_cb, err_cb, exit_cb)
   let l:state = {
         \ 'out_cb': a:out_cb,
         \ 'err_cb': a:err_cb,
         \ 'exit_cb': a:exit_cb,
-        \ 'stdout': '',
-        \ 'stderr': '',
+        \ 'stdout': [],
+        \ 'stderr': [],
         \ 'error': v:false
         \ }
   if has('nvim')  " neovim
@@ -40,14 +39,14 @@ endfunction
 function! s:vim_stdout(channel, data)
   let l:job = g:unpack#jobs[a:job_id]
   call l:job.out_cb(a:data)
-  let l:job.stdout .= a:data
+  call add(l:job.stdout, a:data)
 endfunction
 
 function! s:vim_stderr(channel, data)
   let l:job = g:unpack#jobs[l:job_id]
   call l:job.err_cb(a:data)
   let l:job.error = v:true
-  let l:job.stderr .= a:data
+  call add(l:job.stderr, a:data)
 endfunction
 
 function! s:vim_job_exit(job, status)
@@ -57,14 +56,14 @@ endfunction
 function! s:nvim_stdout(job_id, data, event) dict
   let l:job = g:unpack#jobs[a:job_id]
   call l:job.out_cb(a:data)
-  let l:job.stdout .= a:data
+  call add(l:job.stdout, a:data)
 endfunction
 
 function! s:nvim_stderr(job_id, data, event) dict
-  let l:job = g:unpack#jobs[l:job_id]
+  let l:job = g:unpack#jobs[a:job_id]
   call l:job.err_cb(a:data)
   let l:job.error = v:true
-  let l:job.stderr .= a:data
+  call add(l:job.stderr, a:data)
 endfunction
 
 function! s:nvim_job_exit(job_id, data, event) dict

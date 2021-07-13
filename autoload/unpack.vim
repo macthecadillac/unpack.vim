@@ -8,7 +8,7 @@ let g:unpacked = v:false
 let s:error = ''
 let s:configuration = {}
 let s:configuration.packages = {}
-let s:packpath_modified = v:false
+let g:unpack#packpath_modified = v:false
 
 let s:default_package_options = {
       \   'ft': [],
@@ -17,6 +17,7 @@ let s:default_package_options = {
       \   'branch': '',
       \   'commit': '',
       \   'post-install': '',
+      \   'local': v:false,
       \   'setup': '',
       \   'config': '',
       \ }
@@ -25,7 +26,7 @@ let s:default_package_options = {
 function! unpack#begin(...)
   if a:0 >= 1
     let g:unpack#packpath = a:1
-    let s:packpath_modified = v:true
+    let g:unpack#packpath_modified = v:true
   endif
 endfunction
 
@@ -33,7 +34,7 @@ function! unpack#end()
   let g:unpacked = v:true
 endfunction
 
-function! unpack#load(path, opts)
+function! unpack#load(path, ...)
   if !exists('g:unpacked')
     echohl ErrorMsg
     echom 'Plug-in not initialized. Check your configuration. (Hint: did you call unpack#end?)'
@@ -41,11 +42,16 @@ function! unpack#load(path, opts)
     finish
   endif
 
+  if a:0
+    let l:opts = a:1
+  else
+    let l:opts = s:default_package_options
+  endif
   let g:unpacked = v:true
   let l:name = s:extract_name(trim(a:path))
   let l:full_path = s:get_full_path(a:path)
   if l:name.ok && l:full_path.ok
-    let l:spec = extend(deepcopy(s:default_package_options), a:opts)
+    let l:spec = extend(deepcopy(s:default_package_options), l:opts)
     let l:spec.local = l:full_path.local
     let l:spec.path = l:full_path.path
     let s:configuration.packages[l:name.name] = l:spec
@@ -68,23 +74,26 @@ function! unpack#compile()
         \ 'ft': {},
         \ 'cmd': {},
         \ 'event': {},
+        \ 'branch': {},
+        \ 'commit': {},
+        \ 'local': {},
         \ 'post-install': {},
         \ 'setup': {},
         \ 'config': {},
-        \ 'location': {},
         \ 'path': {}
         \ }
   for [l:name, l:opts] in items(s:configuration.packages)
-    let l:state = s:compile_item(name, opts, l:state)
+    let l:state = s:compile_item(l:name, l:opts, l:state)
   endfor
-  let l:output = unpack#code#gen(l:state)
+  let l:output = unpack#code#gen(l:state, s:configuration)
   let l:config_path = unpack#platform#config_path()
   let l:dir = unpack#platform#join(l:config_path, 'plugin', 'unpack')
-  let l:loader = 'loader.vim'
-  if !isdirectory(l:dir)
-    call mkdir(l:dir, 'p')
+  let l:ftplugin = unpack#platform#join(l:dir, 'ftplugin')
+  if !isdirectory(l:ftplugin)
+    call mkdir(l:ftplugin, 'p')
   endif
-  call writefile(l:output, unpack#platform#join(l:dir, l:loader))
+  call writefile(l:output.loader, unpack#platform#join(l:dir, 'loader.vim'))
+  call writefile(l:output.unplug, unpack#platform#join(l:dir, 'unplug.vim'))
 endfunction
 
 function! unpack#write()
@@ -93,14 +102,14 @@ function! unpack#write()
   for l:package in keys(s:configuration.packages)
     if s:is_member(l:package, l:opt_packages) && !s:is_optional(l:package)
       call s:make_mandatory(l:package)
-    elseif s:is_menber(l:package, l:start_packages) && s:is_optional(l:package)
+    elseif s:is_member(l:package, l:start_packages) && s:is_optional(l:package)
       call s:make_optional(l:package)
     endif
   endfor
   call unpack#compile()
 endfunction
 
-function! s:is_member(iter, list)
+function! s:is_member(item, list)
   for l:item in a:list
     if l:item ==# a:item
       return v:true
@@ -110,20 +119,20 @@ function! s:is_member(iter, list)
 endfunction
 
 function! s:make_optional(name)
-  let l:opt_dir = unpack#platform#opt_path()
-  let l:start_dir = unpack#platform#start_path()
+  let l:opt_dir = unpack#platform#join(unpack#platform#opt_path(), a:name)
+  let l:start_dir = unpack#platform#join(unpack#platform#start_path(), a:name)
   call unpack#platform#move(l:start_dir, l:opt_dir)
 endfunction
 
 function! s:make_mandatory(name)
-  let l:opt_dir = unpack#platform#opt_path()
-  let l:start_dir = unpack#platform#start_path()
+  let l:opt_dir = unpack#platform#join(unpack#platform#opt_path(), a:name)
+  let l:start_dir = unpack#platform#join(unpack#platform#start_path(), a:name)
   call unpack#platform#move(l:opt_dir, l:start_dir)
 endfunction
 
 function! s:is_optional(name)
   let l:spec = s:configuration.packages[a:name]
-  return !empty(l:spec.ft) || !empty(l:spec.cmd) || !empty(l:event)
+  return !empty(l:spec.ft) || !empty(l:spec.cmd) || !empty(l:spec.event)
 endfunction
 
 function! s:compile_item(name, opts, state)
@@ -133,42 +142,49 @@ function! s:compile_item(name, opts, state)
   return a:state
 endfunction
 
-function! s:clone(name, spec)
-  let l:opt_dir = unpack#platform#join(unpack#platform#opt_path(), name) 
-  let l:start_dir = unpack#platform#join(unpack#platform#opt_path(), name) 
+" TODO: add timeout
+function! s:clone(name)
+  let l:spec = s:configuration.packages[a:name]
+  let l:opt_dir = unpack#platform#join(unpack#platform#opt_path(), a:name) 
+  let l:start_dir = unpack#platform#join(unpack#platform#opt_path(), a:name) 
   if !(isdirectory(l:opt_dir) || isdirectory(l:start_dir))
-    let l:dir = is_optional(name) ? unpack#platform#opt_path() : unpack#platform#start_path()
-    let l:post = type(spec['post-install'] ==# 2) ? spec['post-install'] : {_ -> 0}
+    let l:dir = s:is_optional(a:name) ? unpack#platform#opt_path() : unpack#platform#start_path()
+    if !(isdirectory(l:dir))
+      call mkdir(l:dir, 'p')
+    endif
+    let l:Post = type(l:spec['post-install'] ==# 2) ? l:spec['post-install'] : {_ -> 0}
     let l:Echom = function('unpack#ui#echom')
     let l:Echom_err = function('unpack#ui#echom_err')
-    if empty(spec.branch) && empty(spec.commit)
-      let l:cmd = ['git', '-C', l:dir, 'clone', a:spec.path]
-      call unpack#job#start(l:cmd, l:Echom, l:Echom_err, l:post)
-    elseif !empty(spec.commit) && !empty(spec.branch)
-      let l:cmd1 = ['git', '-C', l:dir, 'clone', '-b', spec.branch, a:spec.path]
-      let l:cmd2 = ['git', '-C', unpack#platform#join(l:dir, a:name), 'checkout', spec.commit]
+    if empty(l:spec.branch) && empty(l:spec.commit)
+      let l:cmd = ['git', '-C', l:dir, 'clone', l:spec.path]
+      call unpack#job#start(l:cmd, l:Echom, l:Echom_err, l:Post)
+    elseif !empty(l:spec.commit) && !empty(l:spec.branch)
+      let l:cmd1 = ['git', '-C', l:dir, 'clone', '-b', l:spec.branch, l:spec.path]
+      let l:cmd2 = ['git', '-C', unpack#platform#join(l:dir, a:name), 'checkout', l:spec.commit]
       call unpack#job#start(l:cmd1, l:Echom, l:Echom_err, {->
-         \ unpack#job#start(l:cmd2, l:Echom, l:Echom_err, l:post)})
-    elseif !empty(spec.commit)
-      let l:cmd1 = ['git', '-C', l:dir, 'clone', a:spec.path]
-      let l:cmd2 = ['git', '-C', unpack#platform#join(l:dir, a:name), 'checkout', spec.commit]
+         \ unpack#job#start(l:cmd2, l:Echom, l:Echom_err, l:Post)})
+    elseif !empty(l:spec.commit)
+      let l:cmd1 = ['git', '-C', l:dir, 'clone', l:spec.path]
+      let l:cmd2 = ['git', '-C', unpack#platform#join(l:dir, a:name), 'checkout', l:spec.commit]
       call unpack#job#start(l:cmd1, l:Echom, l:Echom_err, {->
-         \ unpack#job#start(l:cmd2, l:Echom, l:Echom_err, l:post)})
+         \ unpack#job#start(l:cmd2, l:Echom, l:Echom_err, l:Post)})
     else
-      let l:cmd = ['git', '-C', l:dir, 'clone', '-b', spec.branch, a:spec.path]
-      call unpack#job#start(l:cmd, l:Echom, l:Echom_err, l:post)
+      let l:cmd = ['git', '-C', l:dir, 'clone', '-b', l:spec.branch, l:spec.path]
+      call unpack#job#start(l:cmd, l:Echom, l:Echom_err, l:Post)
     endif
   endif
 endfunction
 
-function! s:fetch(name, spec)
-  let l:dir = is_optional(name) ? unpack#platform#opt_path() : unpack#platform#start_path()
+" TODO: add timeout
+function! s:fetch(name)
+  let l:spec = s:configuration.packages[a:name]
+  let l:dir = s:is_optional(a:name) ? unpack#platform#opt_path() : unpack#platform#start_path()
   let l:Echom = function('unpack#ui#echom')
   let l:Echom_err = function('unpack#ui#echom_err')
-  let l:cmd = ['git', '-C', unpack#platform#join(l:dir, name), 'fetch']
+  let l:cmd = ['git', '-C', unpack#platform#join(l:dir, a:name), 'fetch']
   " TODO: only run post-install if something changed
-  let l:post = type(spec['post-install'] ==# 2) ? spec['post-install'] : {_ -> 0}
-  call unpack#job#start(l:cmd, l:Echom, l:Echom_err, l:post)
+  let l:Post = type(l:spec['post-install'] ==# 2) ? l:spec['post-install'] : {_ -> 0}
+  call unpack#job#start(l:cmd, l:Echom, l:Echom_err, l:Post)
 endfunction
 
 function! unpack#list()
@@ -190,18 +206,34 @@ function! s:for_each_package_do(f, names)
 
     if !l:error
       for l:name in a:names
-        call a:f(l:name, s:configuration.packages[l:name])
+        call a:f(l:name)
       endfor
     endif
   else
-    for [l:name, l:spec] in items(s:configuration.packages)
-      call a:f(l:name, l:spec)
+    for l:name in keys(s:configuration.packages)
+      call a:f(l:name)
     endfor
   endif
 endfunction
 
+function! s:install(name)
+  let l:spec = s:configuration.packages[a:name]
+  echom s:configuration.packages
+  echom l:spec
+  if l:spec.local
+    if s:is_optional(a:name)
+      let l:install_path = unpack#platform#opt_path()
+    else
+      let l:install_path = unpack#platform#start_path()
+    endif
+    call unpack#platform#ln(l:spec.path, unpack#platform#join(l:install_path, a:name))
+  else
+    call s:clone(a:name)
+  endif
+endfunction
+
 function! unpack#install(...)
-  call s:for_each_package_do(function('s:clone'), a:000)
+  call s:for_each_package_do(function('s:install'), a:000)
 endfunction
 
 function! unpack#clean()
@@ -214,8 +246,9 @@ endfunction
 function! s:remove_package_if_not_in_list(base_path)
   for l:package in unpack#platform#ls(a:base_path)
     let l:name = unpack#platform#split(l:package)[-1]
-    if !s:is_member(l:name, s:configuration.packages)
-      call delete(l:package, 'rf')
+    if !s:is_member(l:name, keys(s:configuration.packages))
+      let l:path = unpack#platform#join(a:base_path, l:package)
+      call delete(l:path, 'rf')
     endif
   endfor
 endfunction

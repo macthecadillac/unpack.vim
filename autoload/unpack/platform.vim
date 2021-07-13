@@ -28,9 +28,9 @@ endfunction
 
 function! unpack#platform#move(origin, dest)
   if (has('win32') || has('win64')) && !(has('win32unix') || has('win64unix'))
-    call system(join([expand("$COMSPEC"), "/c", "move", a:origin, a:dest]))
+    call system(join(['move', a:origin, a:dest]))
   else
-    call system(join(["mv", a:origin, a:dest]))
+    call system(join(['mv', a:origin, a:dest]))
   endif
 endfunction
 
@@ -38,10 +38,18 @@ function! unpack#platform#ls(path)
   return map(split(globpath(a:path, '*'), '\n'), {_, s -> unpack#platform#split(s)[-1]})
 endfunction
 
+function! unpack#platform#ln(origin, dest)
+  if (has('win32') || has('win64')) && !(has('win32unix') || has('win64unix'))
+    call system(join(['mklink', '/D', a:origin, a:dest]))
+  else
+    call system(join(['ln', '-s', a:origin, a:dest]))
+  endif
+endfunction
+
 function! unpack#platform#opt_path()
-  return unpack#platform#join(g:unpack#packpath, 'unpack', 'opt')
+  return unpack#platform#join(g:unpack#packpath, 'pack', 'unpack', 'opt')
 endfunction
 
 function! unpack#platform#start_path()
-  return unpack#platform#join(g:unpack#packpath, 'unpack', 'start')
+  return unpack#platform#join(g:unpack#packpath, 'pack', 'unpack', 'start')
 endfunction
