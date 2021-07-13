@@ -7,6 +7,8 @@ endif
 
 let g:unpack#packpath = unpack#platform#config_path()
 let g:unpacked = v:false
+let s:default_loader_path = unpack#platform#join(unpack#platform#config_path(), 'loader')
+let g:unpack#loader_path = get(g:, 'unpack#loader_path', s:default_loader_path)
 
 let s:error = ''
 let s:configuration = {}
@@ -90,13 +92,31 @@ function! unpack#compile()
   endfor
   let l:output = unpack#code#gen(l:state, s:configuration)
   let l:config_path = unpack#platform#config_path()
-  let l:dir = unpack#platform#join(l:config_path, 'plugin', 'unpack')
-  let l:ftplugin = unpack#platform#join(l:dir, 'ftplugin')
-  if !isdirectory(l:ftplugin)
-    call mkdir(l:ftplugin, 'p')
+  let l:dir = unpack#platform#join(g:unpack#loader_path, 'unpack')
+  if isdirectory(l:dir)  " remove previously generated loaders
+    call delete(l:dir, 'rf')
   endif
-  call writefile(l:output.loader, unpack#platform#join(l:dir, 'loader.vim'))
-  call writefile(l:output.unpack, unpack#platform#join(l:dir, 'unpack.vim'))
+  call mkdir(l:dir, 'p')
+  if s:contains_ft_opt(l:state)
+    let l:ftplugin = unpack#platform#join(l:dir, 'ftplugin')
+    call mkdir(l:ftplugin)
+    for [l:ft, l:ft_loader] in items(l:output.ftplugin)
+      call writefile(l:ft_loader, unpack#platform#join(l:ftplugin, l:ft . '.vim'))
+    endfor
+  endif
+  let l:plugin = unpack#platform#join(l:dir, 'plugin')
+  call mkdir(l:plugin)
+  call writefile(l:output.loader, unpack#platform#join(l:plugin, 'loader.vim'))
+  call writefile(l:output.unpack, unpack#platform#join(l:plugin, 'unpack.vim'))
+endfunction
+
+function! s:contains_ft_opt(state)
+  for l:spec in values(a:state.ft)
+    if !empty(l:spec)
+      return v:true
+    endif
+  endfor
+  return v:false
 endfunction
 
 function! unpack#write()

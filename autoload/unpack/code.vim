@@ -23,42 +23,47 @@ function! s:rename(name)
   return substitute(tolower(a:name), '\(\.\|-\)', '_', 'g')
 endfunction
 
+function! s:gen_optional_loader(name, spec)
+  let l:output = []
+  let l:name = s:rename(a:name)
+  let l:flag = 'g:unpack_loader_' . l:name . '_init_status'
+  call add(l:output, '  if !' . l:flag)
+  call add(l:output, '    let ' . l:flag . ' = 1')
+  call extend(l:output, s:gen_pre_post(a:spec['pre-load'], 4))
+  call add(l:output, "    execute 'packadd " . a:name . "'")
+  call extend(l:output, s:gen_pre_post(a:spec['post-load'], 4))
+  call add(l:output, '  endif')
+  return l:output
+endfunction
+
 function! s:gen_loader(name, spec)
   let l:output = []
-  if s:is_optional(a:spec)
+  " we use ftplugins for filetype options to save on overhead
+  if !empty(a:spec.cmd) || !empty(a:spec.event)
     let l:name = s:rename(a:name)
     let l:flag = 'g:unpack_loader_' . l:name . '_init_status'
     call add(l:output, 'let ' . l:flag . ' = 0')
     call add(l:output, 'function! unpack#loader#' . l:name . '()')
-    call add(l:output, '  if !' . l:flag)
-    call add(l:output, '    let ' . l:flag . ' = 1')
-
-    call extend(l:output, s:gen_pre_post(a:spec['pre-load'], 4))
-    call add(l:output, "    execute 'packadd " . a:name . "'")
-    call extend(l:output, s:gen_pre_post(a:spec['post-load'], 4))
-
-    call add(l:output, '  endif')
+    call extend(l:output, s:gen_optional_loader(a:name, a:spec))
     call add(l:output, 'endfunction')
-  else
+  elseif empty(a:spec.ft)
     if a:spec['pre-load'] !=# ''
       call extend(l:output, s:gen_pre_post(a:spec['pre-load']))
+      call add(l:output, "execute 'packadd " . a:name . "'")
     endif
-    call add(l:output, "execute 'packadd " . a:name . "'")
     call extend(l:output, s:gen_pre_post(a:spec['post-load']))
   endif
   return l:output
 endfunction
 
-function! s:gen_item(name, spec, state)
+function! s:gen_cmd_item(name, spec, state)
   let l:defs = []
   let l:name = s:rename(a:name)
   let l:cmd = 'call unpack#loader#' . l:name . '()'
 
-  for [l:type, l:key] in [['FileType', 'ft'], ['CmdUndefined', 'cmd']]
-    if has_key(a:state[l:key], a:name)
-      call add(l:defs, [l:type, a:state[l:key][a:name], l:cmd])
-    endif
-  endfor
+  if has_key(a:state.cmd, a:name)
+    call add(l:defs, ['CmdUndefined', a:state.cmd[a:name], l:cmd])
+  endif
 
   if has_key(a:state.event, a:name)
     for l:event in a:state.event[a:name]
@@ -69,6 +74,14 @@ function! s:gen_item(name, spec, state)
   let l:output = {}
   let l:output.loader = s:gen_loader(a:name, a:spec)
   let l:output.groupdef = s:gen_augroup(toupper(l:name), l:defs)
+  return l:output
+endfunction
+
+function! s:gen_ft_item(name, spec)
+  let l:output = {}
+  for l:ft in a:spec.ft
+    let l:output[l:ft] = s:gen_optional_loader(a:name, a:spec)
+  endfor
   return l:output
 endfunction
 
@@ -95,9 +108,24 @@ function! unpack#code#gen(state, configuration)
   call add(l:groupdef, '  autocmd!')
   for [l:name, l:spec] in items(a:configuration.packages)
     if s:needs_loader(l:spec)
-      let l:item_code = s:gen_item(l:name, l:spec, a:state)
+      let l:item_code = s:gen_cmd_item(l:name, l:spec, a:state)
       call extend(l:output.loader, l:item_code.loader)
       call extend(l:groupdef, l:item_code.groupdef)
+      if !empty(l:spec.ft)
+        let l:ft_code = s:gen_ft_item(l:name, l:spec)
+        for [l:ft, l:code] in items(l:ft_code)
+          if has_key(l:output.ftplugin, l:ft)
+            call extend(l:output.ftplugin[l:ft], l:code)
+          else
+            let l:output.ftplugin[l:ft] = l:code
+          endif
+        endfor
+        " status flag needs to be initialized if there's no cmd/event specific
+        " triggers
+        if empty(l:spec.cmd) && empty(l:spec.event)
+          call add(l:output.loader, 'let g:unpack_loader_' . s:rename(l:name) . '_init_status = 0')
+        endif
+      endif
     endif
   endfor
   call add(l:groupdef, 'augroup END')
