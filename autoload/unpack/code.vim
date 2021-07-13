@@ -8,16 +8,11 @@ function! s:gen_augroup(name, defs)
   return l:output
 endfunction
 
-function! s:gen_pre_post(exe)
-  if a:exe ==# ''
+function! s:gen_pre_post(cmd)
+  if a:cmd ==# ''
     return []
-  elseif type(a:exe) ==# 1  " string
-    return ['    execute "' . a:exe . '"']
-  elseif type(a:exe) ==# 2  " lambda
-    return ['    call ' . a:exe . '()']
   else
-    let error = '"setup" must be either a funcref or a string'
-    return []
+    return ['    execute "' . a:cmd . '"']
   endif
 endfunction
 
@@ -35,9 +30,9 @@ function! s:gen_loader(name, state)
   call add(l:output, '  if !' . l:flag)
   call add(l:output, '    let ' . l:flag . ' = 1')
 
-  call extend(l:output, s:gen_pre_post(get(a:state.setup, a:name, '')))
+  call extend(l:output, s:gen_pre_post(get(a:state['pre-load'], a:name, '')))
   call add(l:output, '    execute "packadd ' . a:name . '"')
-  call extend(l:output, s:gen_pre_post(get(a:state.config, a:name, '')))
+  call extend(l:output, s:gen_pre_post(get(a:state['post-load'], a:name, '')))
 
   call add(l:output, '  endif')
   call add(l:output, 'endfunction')
@@ -67,6 +62,14 @@ function! s:gen_item(name, state)
   return l:output
 endfunction
 
+function! s:needs_loader(spec)
+  return !empty(a:spec.ft) ||
+       \ !empty(a:spec.cmd) ||
+       \ !empty(a:spec.event) ||
+       \ a:spec['pre-load'] !=# '' ||
+       \ a:spec['post-load'] !=# ''
+endfunction
+
 function! unpack#code#gen(state, configuration)
   let l:output = {
         \   'loader': [],
@@ -80,10 +83,12 @@ function! unpack#code#gen(state, configuration)
   let l:groupdef = []
   call add(l:groupdef, 'augroup UNPACK_AUTOLOAD')
   call add(l:groupdef, '  autocmd!')
-  for l:name in keys(a:configuration.packages)
-    let l:item_code = s:gen_item(l:name, a:state)
-    call extend(l:output.loader, l:item_code.loader)
-    call extend(l:groupdef, l:item_code.groupdef)
+  for [l:name, l:spec] in items(a:configuration.packages)
+    if s:needs_loader(l:spec)
+      let l:item_code = s:gen_item(l:name, a:state)
+      call extend(l:output.loader, l:item_code.loader)
+      call extend(l:groupdef, l:item_code.groupdef)
+    endif
   endfor
   call add(l:groupdef, 'augroup END')
   call extend(l:output.loader, l:groupdef)

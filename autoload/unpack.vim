@@ -1,3 +1,5 @@
+" FIXME: check every dictionary indexing and insert error handler for the
+" configuration processing step since users might put in undefined keys
 if exists('g:unpacked')
   finish
 endif
@@ -18,8 +20,8 @@ let s:default_package_options = {
       \   'commit': '',
       \   'post-install': '',
       \   'local': v:false,
-      \   'setup': '',
-      \   'config': '',
+      \   'pre-load': '',
+      \   'post-load': '',
       \ }
 
 " initialize the plugin
@@ -78,8 +80,8 @@ function! unpack#compile()
         \ 'commit': {},
         \ 'local': {},
         \ 'post-install': {},
-        \ 'setup': {},
-        \ 'config': {},
+        \ 'pre-load': {},
+        \ 'post-load': {},
         \ 'path': {}
         \ }
   for [l:name, l:opts] in items(s:configuration.packages)
@@ -132,12 +134,12 @@ endfunction
 
 function! s:is_optional(name)
   let l:spec = s:configuration.packages[a:name]
-  return !empty(l:spec.ft) || !empty(l:spec.cmd) || !empty(l:spec.event)
+  return !empty(l:spec.ft) || !empty(l:spec.cmd) || !empty(l:spec.event) || l:spec['pre-load'] !=# ''
 endfunction
 
 function! s:compile_item(name, opts, state)
-  for [l:key, l:val] in items(a:opts)
-    let a:state[l:key][a:name] = l:val
+  for l:key in keys(a:opts)
+    let a:state[l:key][a:name] = a:opts[l:key]
   endfor
   return a:state
 endfunction
@@ -152,24 +154,23 @@ function! s:clone(name)
     if !(isdirectory(l:dir))
       call mkdir(l:dir, 'p')
     endif
-    let l:Post = type(l:spec['post-install'] ==# 2) ? l:spec['post-install'] : {_ -> 0}
     let l:Update = function('unpack#ui#update')
     if empty(l:spec.branch) && empty(l:spec.commit)
       let l:cmd = ['git', '-C', l:dir, 'clone', l:spec.path]
-      call unpack#job#start(a:name, l:cmd, {->0}, l:Update, l:Post)
+      call unpack#job#start(a:name, l:cmd, {->0}, l:Update, l:spec['post-install'])
     elseif !empty(l:spec.commit) && !empty(l:spec.branch)
       let l:cmd1 = ['git', '-C', l:dir, 'clone', '-b', l:spec.branch, l:spec.path]
       let l:cmd2 = ['git', '-C', unpack#platform#join(l:dir, a:name), 'checkout', l:spec.commit]
       call unpack#job#start(a:name, l:cmd1, {->0}, l:Update, {->
-         \ unpack#job#start(a:name, l:cmd2, {->0}, l:Update, l:Post)})
+         \ unpack#job#start(a:name, l:cmd2, {->0}, l:Update, l:spec['post-install'])})
     elseif !empty(l:spec.commit)
       let l:cmd1 = ['git', '-C', l:dir, 'clone', l:spec.path]
       let l:cmd2 = ['git', '-C', unpack#platform#join(l:dir, a:name), 'checkout', l:spec.commit]
       call unpack#job#start(a:name, l:cmd1, {->0}, l:Update, {->
-         \ unpack#job#start(a:name, l:cmd2, {->0}, l:Update, l:Post)})
+         \ unpack#job#start(a:name, l:cmd2, {->0}, l:Update, l:spec['post-install'])})
     else
       let l:cmd = ['git', '-C', l:dir, 'clone', '-b', l:spec.branch, l:spec.path]
-      call unpack#job#start(a:name, l:cmd, {->0}, l:Update, l:Post)
+      call unpack#job#start(a:name, l:cmd, {->0}, l:Update, l:spec['post-install'])
     endif
   endif
 endfunction
@@ -181,8 +182,7 @@ function! s:fetch(name)
   let l:Update = function('unpack#ui#update')
   let l:cmd = ['git', '-C', unpack#platform#join(l:dir, a:name), 'fetch']
   " TODO: only run post-install if something changed
-  let l:Post = type(l:spec['post-install'] ==# 2) ? l:spec['post-install'] : {_ -> 0}
-  call unpack#job#start(a:name, l:cmd, {->0}, l:Update, l:Post)
+  call unpack#job#start(a:name, l:cmd, {->0}, l:Update, l:spec['post-install'])
 endfunction
 
 function! unpack#list()
