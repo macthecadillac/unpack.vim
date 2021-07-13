@@ -23,8 +23,8 @@ let s:default_package_options = {
       \   'commit': '',
       \   'post-install': '',
       \   'local': v:false,
-      \   'pre-load': '',
-      \   'post-load': '',
+      \   'pre': '',
+      \   'post': '',
       \ }
 
 " initialize the plugin
@@ -83,8 +83,8 @@ function! unpack#compile()
         \ 'commit': {},
         \ 'local': {},
         \ 'post-install': {},
-        \ 'pre-load': {},
-        \ 'post-load': {},
+        \ 'pre': {},
+        \ 'post': {},
         \ 'path': {}
         \ }
   for [l:name, l:opts] in items(s:configuration.packages)
@@ -154,7 +154,7 @@ endfunction
 
 function! s:is_optional(name)
   let l:spec = s:configuration.packages[a:name]
-  return !empty(l:spec.ft) || !empty(l:spec.cmd) || !empty(l:spec.event) || l:spec['pre-load'] !=# ''
+  return !empty(l:spec.ft) || !empty(l:spec.cmd) || !empty(l:spec.event) || l:spec['pre'] !=# ''
 endfunction
 
 function! s:compile_item(name, opts, state)
