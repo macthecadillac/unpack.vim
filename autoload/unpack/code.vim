@@ -1,4 +1,3 @@
-" TODO: state might not be necessary
 function! s:gen_augroup(name, defs)
   let l:output = []
   for [l:type, l:filters, l:cmd] in a:defs
@@ -53,27 +52,25 @@ function! s:gen_loader(name, spec)
   elseif empty(a:spec.ft)
     if a:spec['pre'] !=# ''
       call extend(l:output, s:gen_pre_post(a:spec['pre']))
+      call add(l:output, "execute 'packadd " . a:name . "'")
     endif
-    call add(l:output, "execute 'packadd " . a:name . "'")
     call extend(l:output, s:gen_pre_post(a:spec['post']))
   endif
   return l:output
 endfunction
 
-function! s:gen_cmd_item(name, spec, state)
+function! s:gen_cmd_item(name, spec)
   let l:defs = []
   let l:name = s:rename(a:name)
-  let l:cmd = 'call unpack#loader#' . l:name . '()'
+  let l:loader_cmd = 'call unpack#loader#' . l:name . '()'
 
-  if has_key(a:state.cmd, a:name)
-    call add(l:defs, ['CmdUndefined', a:state.cmd[a:name], l:cmd])
+  if !empty(a:spec.cmd)
+    call add(l:defs, ['CmdUndefined', a:spec.cmd, l:loader_cmd])
   endif
 
-  if has_key(a:state.event, a:name)
-    for l:event in a:state.event[a:name]
-      call add(l:defs, [l:event, ['*'], l:cmd])
-    endfor
-  endif
+  for l:event in a:spec.event
+    call add(l:defs, [l:event, ['*'], l:loader_cmd])
+  endfor
 
   let l:output = {}
   let l:output.loader = s:gen_loader(a:name, a:spec)
@@ -98,7 +95,7 @@ function! s:is_optional(spec)
   return !empty(a:spec.ft) || !empty(a:spec.cmd) || !empty(a:spec.event)
 endfunction
 
-function! unpack#code#gen(state, configuration)
+function! unpack#code#gen(configuration)
   let l:output = {
         \   'plugin': { 'unpack': [] },
         \   'ftplugin': {},
@@ -114,7 +111,7 @@ function! unpack#code#gen(state, configuration)
   call add(l:groupdef, '  autocmd!')
   for [l:name, l:spec] in items(a:configuration.packages)
     if s:needs_loader(l:spec)
-      let l:item_code = s:gen_cmd_item(l:name, l:spec, a:state)
+      let l:item_code = s:gen_cmd_item(l:name, l:spec)
       if s:is_optional(l:spec)
         call extend(l:output.autoload.unpack.loader, l:item_code.loader)
       else

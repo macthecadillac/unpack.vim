@@ -1,6 +1,5 @@
 " FIXME: check every dictionary indexing and insert error handler for the
 " configuration processing step since users might put in undefined keys
-" TODO: state might not be necessary
 if exists('g:unpacked')
   finish
 endif
@@ -25,6 +24,7 @@ let s:default_package_options = {
       \   'local': v:false,
       \   'pre': '',
       \   'post': '',
+      \   'requires': [],
       \ }
 
 " initialize the plugin
@@ -71,26 +71,8 @@ function! unpack#load(path, ...)
   endif
 endfunction
 
-" TODO: split filetype autocmds into ftplugins within the loader plugin. That
-" way lazyload on filetype will have literally zero overhead
 function! unpack#compile()
-  let l:state = {
-        \ 'packages': [],
-        \ 'ft': {},
-        \ 'cmd': {},
-        \ 'event': {},
-        \ 'branch': {},
-        \ 'commit': {},
-        \ 'local': {},
-        \ 'post-install': {},
-        \ 'pre': {},
-        \ 'post': {},
-        \ 'path': {}
-        \ }
-  for [l:name, l:opts] in items(s:configuration.packages)
-    let l:state = s:compile_item(l:name, l:opts, l:state)
-  endfor
-  let l:output = unpack#code#gen(l:state, s:configuration)
+  let l:output = unpack#code#gen(s:configuration)
   let l:config_path = unpack#platform#config_path()
   if isdirectory(g:unpack#loader_path)  " remove previously generated loaders
     call delete(g:unpack#loader_path, 'rf')
@@ -155,13 +137,6 @@ endfunction
 function! s:is_optional(name)
   let l:spec = s:configuration.packages[a:name]
   return !empty(l:spec.ft) || !empty(l:spec.cmd) || !empty(l:spec.event) || l:spec['pre'] !=# ''
-endfunction
-
-function! s:compile_item(name, opts, state)
-  for l:key in keys(a:opts)
-    let a:state[l:key][a:name] = a:opts[l:key]
-  endfor
-  return a:state
 endfunction
 
 " TODO: add timeout
