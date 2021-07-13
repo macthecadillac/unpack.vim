@@ -180,8 +180,8 @@ function! s:fetch(name)
   call unpack#job#start(a:name, l:cmd, {->0}, l:Update, l:spec['post-install'])
 endfunction
 
-function! unpack#list()
-  return sort(keys(s:configuration.packages))
+function! unpack#list(text, ...)
+  return filter(sort(keys(s:configuration.packages)), {_, s -> stridx(s, a:text) ==# 0})
 endfunction
 
 function! s:for_each_package_do(f, names)
