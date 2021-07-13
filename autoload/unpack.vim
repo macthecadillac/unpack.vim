@@ -93,7 +93,7 @@ function! unpack#compile()
     call mkdir(l:ftplugin, 'p')
   endif
   call writefile(l:output.loader, unpack#platform#join(l:dir, 'loader.vim'))
-  call writefile(l:output.unplug, unpack#platform#join(l:dir, 'unplug.vim'))
+  call writefile(l:output.unpack, unpack#platform#join(l:dir, 'unpack.vim'))
 endfunction
 
 function! unpack#write()
@@ -146,7 +146,7 @@ endfunction
 function! s:clone(name)
   let l:spec = s:configuration.packages[a:name]
   let l:opt_dir = unpack#platform#join(unpack#platform#opt_path(), a:name) 
-  let l:start_dir = unpack#platform#join(unpack#platform#opt_path(), a:name) 
+  let l:start_dir = unpack#platform#join(unpack#platform#start_path(), a:name) 
   if !(isdirectory(l:opt_dir) || isdirectory(l:start_dir))
     let l:dir = s:is_optional(a:name) ? unpack#platform#opt_path() : unpack#platform#start_path()
     if !(isdirectory(l:dir))
@@ -218,8 +218,6 @@ endfunction
 
 function! s:install(name)
   let l:spec = s:configuration.packages[a:name]
-  echom s:configuration.packages
-  echom l:spec
   if l:spec.local
     if s:is_optional(a:name)
       let l:install_path = unpack#platform#opt_path()
