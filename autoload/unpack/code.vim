@@ -1,3 +1,4 @@
+" TODO: state might not be necessary
 function! s:gen_augroup(name, defs)
   let l:output = []
   for [l:type, l:filters, l:cmd] in a:defs
@@ -8,11 +9,12 @@ function! s:gen_augroup(name, defs)
   return l:output
 endfunction
 
-function! s:gen_pre_post(cmd)
+function! s:gen_pre_post(cmd, ...)
+  let l:padding = a:0 ? repeat(' ', a:1) : ''
   if a:cmd ==# ''
     return []
   else
-    return ['    execute "' . a:cmd . '"']
+    return [l:padding . 'execute "' . a:cmd . '"']
   endif
 endfunction
 
@@ -21,25 +23,33 @@ function! s:rename(name)
   return substitute(tolower(a:name), '\(\.\|-\)', '_', 'g')
 endfunction
 
-function! s:gen_loader(name, state)
+function! s:gen_loader(name, spec)
   let l:output = []
-  let l:name = s:rename(a:name)
-  let l:flag = 'g:unpack_loader_' . l:name . '_init_status'
-  call add(l:output, 'let ' . l:flag . ' = 0')
-  call add(l:output, 'function! unpack#loader#' . l:name . '()')
-  call add(l:output, '  if !' . l:flag)
-  call add(l:output, '    let ' . l:flag . ' = 1')
+  if s:is_optional(a:spec)
+    let l:name = s:rename(a:name)
+    let l:flag = 'g:unpack_loader_' . l:name . '_init_status'
+    call add(l:output, 'let ' . l:flag . ' = 0')
+    call add(l:output, 'function! unpack#loader#' . l:name . '()')
+    call add(l:output, '  if !' . l:flag)
+    call add(l:output, '    let ' . l:flag . ' = 1')
 
-  call extend(l:output, s:gen_pre_post(get(a:state['pre-load'], a:name, '')))
-  call add(l:output, '    execute "packadd ' . a:name . '"')
-  call extend(l:output, s:gen_pre_post(get(a:state['post-load'], a:name, '')))
+    call extend(l:output, s:gen_pre_post(a:spec['pre-load'], 4))
+    call add(l:output, "    execute 'packadd " . a:name . "'")
+    call extend(l:output, s:gen_pre_post(a:spec['post-load'], 4))
 
-  call add(l:output, '  endif')
-  call add(l:output, 'endfunction')
+    call add(l:output, '  endif')
+    call add(l:output, 'endfunction')
+  else
+    if a:spec['pre-load'] !=# ''
+      call extend(l:output, s:gen_pre_post(a:spec['pre-load']))
+    endif
+    call add(l:output, "execute 'packadd " . a:name . "'")
+    call extend(l:output, s:gen_pre_post(a:spec['post-load']))
+  endif
   return l:output
 endfunction
 
-function! s:gen_item(name, state)
+function! s:gen_item(name, spec, state)
   let l:defs = []
   let l:name = s:rename(a:name)
   let l:cmd = 'call unpack#loader#' . l:name . '()'
@@ -57,17 +67,17 @@ function! s:gen_item(name, state)
   endif
 
   let l:output = {}
-  let l:output.loader = s:gen_loader(a:name, a:state)
+  let l:output.loader = s:gen_loader(a:name, a:spec)
   let l:output.groupdef = s:gen_augroup(toupper(l:name), l:defs)
   return l:output
 endfunction
 
 function! s:needs_loader(spec)
-  return !empty(a:spec.ft) ||
-       \ !empty(a:spec.cmd) ||
-       \ !empty(a:spec.event) ||
-       \ a:spec['pre-load'] !=# '' ||
-       \ a:spec['post-load'] !=# ''
+  return a:spec['post-load'] !=# '' || a:spec['pre-load'] !=# '' || s:is_optional(a:spec)
+endfunction
+
+function! s:is_optional(spec)
+  return !empty(a:spec.ft) || !empty(a:spec.cmd) || !empty(a:spec.event)
 endfunction
 
 function! unpack#code#gen(state, configuration)
@@ -85,7 +95,7 @@ function! unpack#code#gen(state, configuration)
   call add(l:groupdef, '  autocmd!')
   for [l:name, l:spec] in items(a:configuration.packages)
     if s:needs_loader(l:spec)
-      let l:item_code = s:gen_item(l:name, a:state)
+      let l:item_code = s:gen_item(l:name, l:spec, a:state)
       call extend(l:output.loader, l:item_code.loader)
       call extend(l:groupdef, l:item_code.groupdef)
     endif

@@ -1,5 +1,6 @@
 " FIXME: check every dictionary indexing and insert error handler for the
 " configuration processing step since users might put in undefined keys
+" TODO: state might not be necessary
 if exists('g:unpacked')
   finish
 endif
