@@ -19,8 +19,9 @@ function! unpack#solv#has_dependents(name, config)
 endfunction
 
 function! unpack#solv#nodes(config)
-  if !exists('s:graphs')
+  if !exists('s:graphs') && g:unpack#config_changed
     let s:graphs = s:build_nodes(a:config, v:false)
+    let g:unpack#config_changed = v:false
   endif
   return s:graphs
 endfunction

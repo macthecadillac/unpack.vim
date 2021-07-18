@@ -1,13 +1,14 @@
 " FIXME: check every dictionary indexing and insert error handler for the
 " configuration processing step since users might put in undefined keys
-if exists('g:unpacked')
+if exists('s:config_loaded')
   finish
 endif
 
 let g:unpack#packpath = unpack#platform#config_path()
-let g:unpacked = v:false
+let s:config_loaded = v:false
 let s:default_loader_path = unpack#platform#join(unpack#platform#config_path(), 'unpack')
 let g:unpack#loader_path = get(g:, 'unpack#loader_path', s:default_loader_path)
+let g:unpack#config_changed = v:true
 
 let s:error = ''
 let s:configuration = {}
@@ -37,13 +38,14 @@ function! unpack#begin(...)
 endfunction
 
 function! unpack#end()
-  let g:unpacked = v:true
+  let s:config_loaded = v:true
+  let g:unpack#config_changed = v:true
 endfunction
 
 function! unpack#load(path, ...)
-  if !exists('g:unpacked')
+  if !exists('s:config_loaded')
     echohl ErrorMsg
-    echom 'Plug-in not initialized. Check your configuration. (Hint: did you call unpack#end?)'
+    echom 'Package manager not initialized. Check your configuration. (Hint: did you call unpack#end?)'
     echohl None
     finish
   endif
@@ -53,7 +55,6 @@ function! unpack#load(path, ...)
   else
     let l:opts = s:default_package_options
   endif
-  let g:unpacked = v:true
   let l:name = s:extract_name(trim(a:path))
   let l:full_path = s:get_full_path(a:path)
   if l:name.ok && l:full_path.ok
@@ -70,13 +71,6 @@ function! unpack#load(path, ...)
     endif
     echohl NONE
   endif
-endfunction
-
-function! s:dependency_graphs()
-  if !exists('s:package_dependency_graphs')
-    let s:package_dependency_graphs = unpack#solv#nodes(s:configuration)
-  endif
-  return s:package_dependency_graphs
 endfunction
 
 function! unpack#compile()
@@ -112,7 +106,7 @@ function! unpack#write()
   let l:opt_packages = unpack#platform#ls(unpack#platform#opt_path())
   let l:start_packages = unpack#platform#ls(unpack#platform#start_path())
   for [l:package, l:spec] in items(s:configuration.packages)
-    if s:is_member(l:package, l:opt_packages) && unpack#solv#is_optional(l:package, s:configuration)
+    if s:is_member(l:package, l:opt_packages) && !unpack#solv#is_optional(l:package, s:configuration)
       call s:make_mandatory(l:package)
     elseif s:is_member(l:package, l:start_packages) && unpack#solv#is_optional(l:package, s:configuration)
       call s:make_optional(l:package)
