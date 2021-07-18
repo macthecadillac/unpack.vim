@@ -15,6 +15,7 @@ let s:configuration.packages = {}
 let g:unpack#packpath_modified = v:false
 
 let s:default_package_options = {
+      \   'opt': v:false,
       \   'ft': [],
       \   'cmd': [],
       \   'event': [],
@@ -71,6 +72,13 @@ function! unpack#load(path, ...)
   endif
 endfunction
 
+function! s:dependency_graphs()
+  if !exists('s:package_dependency_graphs')
+    let s:package_dependency_graphs = unpack#solv#nodes(s:configuration)
+  endif
+  return s:package_dependency_graphs
+endfunction
+
 function! unpack#compile()
   let l:output = unpack#code#gen(s:configuration)
   let l:config_path = unpack#platform#config_path()
@@ -103,10 +111,10 @@ endfunction
 function! unpack#write()
   let l:opt_packages = unpack#platform#ls(unpack#platform#opt_path())
   let l:start_packages = unpack#platform#ls(unpack#platform#start_path())
-  for l:package in keys(s:configuration.packages)
-    if s:is_member(l:package, l:opt_packages) && !s:is_optional(l:package)
+  for [l:package, l:spec] in items(s:configuration.packages)
+    if s:is_member(l:package, l:opt_packages) && unpack#solv#is_optional(l:package, s:configuration)
       call s:make_mandatory(l:package)
-    elseif s:is_member(l:package, l:start_packages) && s:is_optional(l:package)
+    elseif s:is_member(l:package, l:start_packages) && unpack#solv#is_optional(l:package, s:configuration)
       call s:make_optional(l:package)
     endif
   endfor
@@ -134,18 +142,13 @@ function! s:make_mandatory(name)
   call unpack#platform#move(l:opt_dir, l:start_dir)
 endfunction
 
-function! s:is_optional(name)
-  let l:spec = s:configuration.packages[a:name]
-  return !empty(l:spec.ft) || !empty(l:spec.cmd) || !empty(l:spec.event) || l:spec['pre'] !=# ''
-endfunction
-
 " TODO: add timeout
 function! s:clone(name)
   let l:spec = s:configuration.packages[a:name]
   let l:opt_dir = unpack#platform#join(unpack#platform#opt_path(), a:name) 
   let l:start_dir = unpack#platform#join(unpack#platform#start_path(), a:name) 
   if !(isdirectory(l:opt_dir) || isdirectory(l:start_dir))
-    let l:dir = s:is_optional(a:name) ? unpack#platform#opt_path() : unpack#platform#start_path()
+    let l:dir = unpack#solv#is_optional(a:name, s:configuration) ? unpack#platform#opt_path() : unpack#platform#start_path()
     if !(isdirectory(l:dir))
       call mkdir(l:dir, 'p')
     endif
@@ -173,7 +176,8 @@ endfunction
 " TODO: add timeout
 function! s:fetch(name)
   let l:spec = s:configuration.packages[a:name]
-  let l:dir = s:is_optional(a:name) ? unpack#platform#opt_path() : unpack#platform#start_path()
+  let l:dir = unpack#solv#is_optional(a:name, s:configuration) ?
+        \ unpack#platform#opt_path() : unpack#platform#start_path()
   let l:Update = function('unpack#ui#update')
   let l:cmd = ['git', '-C', unpack#platform#join(l:dir, a:name), 'fetch']
   " TODO: only run post-install if something changed
@@ -212,7 +216,7 @@ endfunction
 function! s:install(name)
   let l:spec = s:configuration.packages[a:name]
   if l:spec.local
-    if s:is_optional(a:name)
+    if unpack#solv#is_optional(a:name, s:configuration)
       let l:install_path = unpack#platform#opt_path()
     else
       let l:install_path = unpack#platform#start_path()

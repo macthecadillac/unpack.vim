@@ -1,4 +1,4 @@
-function! s:gen_augroup(name, defs)
+function! s:gen_aucmds(defs)
   let l:output = []
   for [l:type, l:filters, l:cmd] in a:defs
     for l:filter in l:filters
@@ -26,73 +26,77 @@ function! s:rename(name)
   return substitute(tolower(a:name), '\(\.\|-\)', '_', 'g')
 endfunction
 
-function! s:gen_optional_loader(name, spec)
+" FIXME: this won't work if the dependency has filetypes defined
+function! s:gen_optional_loader(name, configuration)
+  let l:spec = a:configuration.packages[a:name]
   let l:output = []
   let l:name = s:rename(a:name)
-  let l:flag = 'g:unpack_loader_' . l:name . '_init_status'
-  call add(l:output, '  if !' . l:flag)
-  call add(l:output, '    let ' . l:flag . ' = 1')
-  call extend(l:output, s:gen_pre_post(a:spec['pre'], 4))
+  call add(l:output,   "  if !get(g:, 'unpack_loader_" . l:name . "_init_status', v:false)")
+  call add(l:output, "    let g:unpack_loader_" . l:name . "_init_status = v:true")
+  for l:dep in l:spec.requires
+    if unpack#solv#is_optional(a:name, a:configuration)
+      call add(l:output, '    call unpack#loader#' . s:rename(l:dep) . '()')
+    endif
+  endfor
+  call extend(l:output, s:gen_pre_post(l:spec['pre'], 4))
   call add(l:output, "    execute 'packadd " . a:name . "'")
-  call extend(l:output, s:gen_pre_post(a:spec['post'], 4))
+  call extend(l:output, s:gen_pre_post(l:spec['post'], 4))
   call add(l:output, '  endif')
   return l:output
 endfunction
 
-function! s:gen_loader(name, spec)
+function! s:gen_loader(name, configuration)
   let l:output = []
+  let l:spec = a:configuration.packages[a:name]
   " we use ftplugins for filetype options to save on overhead
-  if !empty(a:spec.cmd) || !empty(a:spec.event)
+  if !empty(l:spec.cmd) || !empty(l:spec.event) || l:spec.opt
     let l:name = s:rename(a:name)
-    let l:flag = 'g:unpack_loader_' . l:name . '_init_status'
-    call add(l:output, 'let ' . l:flag . ' = 0')
     call add(l:output, 'function! unpack#loader#' . l:name . '()')
-    call extend(l:output, s:gen_optional_loader(a:name, a:spec))
+    call extend(l:output, s:gen_optional_loader(a:name, a:configuration))
     call add(l:output, 'endfunction')
-  elseif empty(a:spec.ft)
-    if a:spec['pre'] !=# ''
-      call extend(l:output, s:gen_pre_post(a:spec['pre']))
+  elseif empty(l:spec.ft)
+    if l:spec['pre'] !=# ''
+      call extend(l:output, s:gen_pre_post(l:spec['pre']))
       call add(l:output, "execute 'packadd " . a:name . "'")
     endif
-    call extend(l:output, s:gen_pre_post(a:spec['post']))
+    call extend(l:output, s:gen_pre_post(l:spec['post']))
   endif
   return l:output
 endfunction
 
-function! s:gen_cmd_item(name, spec)
+function! s:gen_autoload_item(name, configuration)
+  let l:spec = a:configuration.packages[a:name]
   let l:defs = []
   let l:name = s:rename(a:name)
   let l:loader_cmd = 'call unpack#loader#' . l:name . '()'
 
-  if !empty(a:spec.cmd)
-    call add(l:defs, ['CmdUndefined', a:spec.cmd, l:loader_cmd])
+  if !empty(l:spec.cmd)
+    call add(l:defs, ['CmdUndefined', l:spec.cmd, l:loader_cmd])
   endif
 
-  for l:event in a:spec.event
+  for l:event in l:spec.event
     call add(l:defs, [l:event, ['*'], l:loader_cmd])
   endfor
 
   let l:output = {}
-  let l:output.loader = s:gen_loader(a:name, a:spec)
-  let l:output.groupdef = s:gen_augroup(toupper(l:name), l:defs)
+  let l:output.loader = s:gen_loader(a:name, a:configuration)
+  let l:output.groupdef = s:gen_aucmds(l:defs)
   return l:output
 endfunction
 
-function! s:gen_ft_item(name, spec)
+function! s:gen_ft_item(name, configuration)
   let l:output = {}
-  for l:ft in a:spec.ft
+  let l:spec = a:configuration.packages[a:name]
+  for l:ft in l:spec.ft
     "                                                               remove indentation
-    let l:output[l:ft] = map(s:gen_optional_loader(a:name, a:spec), {_, s -> s[2:]})
+    let l:output[l:ft] = map(s:gen_optional_loader(a:name, a:configuration), {_, s -> s[2:]})
   endfor
   return l:output
 endfunction
 
-function! s:needs_loader(spec)
-  return a:spec['post'] !=# '' || a:spec['pre'] !=# '' || s:is_optional(a:spec)
-endfunction
-
-function! s:is_optional(spec)
-  return !empty(a:spec.ft) || !empty(a:spec.cmd) || !empty(a:spec.event)
+function! s:needs_loader(name, config)
+  let l:spec = a:config.packages[a:name]
+  return l:spec['post'] !=# '' || l:spec['pre'] !=# '' || unpack#solv#is_optional(a:name, a:config)
 endfunction
 
 function! unpack#code#gen(configuration)
@@ -110,29 +114,31 @@ function! unpack#code#gen(configuration)
   call add(l:groupdef, 'augroup UNPACK_AUTOLOAD')
   call add(l:groupdef, '  autocmd!')
   for [l:name, l:spec] in items(a:configuration.packages)
-    if s:needs_loader(l:spec)
-      let l:item_code = s:gen_cmd_item(l:name, l:spec)
-      if s:is_optional(l:spec)
+    if s:needs_loader(l:name, a:configuration)
+      let l:item_code = s:gen_autoload_item(l:name, a:configuration)
+      if unpack#solv#is_optional(l:name, a:configuration)
         call extend(l:output.autoload.unpack.loader, l:item_code.loader)
       else
         call extend(l:output.plugin.unpack, l:item_code.loader)
       endif
       call extend(l:groupdef, l:item_code.groupdef)
       if !empty(l:spec.ft)
-        let l:ft_code = s:gen_ft_item(l:name, l:spec)
-        for [l:ft, l:code] in items(l:ft_code)
-          if has_key(l:output.ftplugin, l:ft)
-            call extend(l:output.ftplugin[l:ft], l:code)
-          else
-            let l:output.ftplugin[l:ft] = ['" autogenerated by unpack#compile()']
-            call extend(l:output.ftplugin[l:ft], l:code)
-          endif
-        endfor
-        " status flag needs to be initialized if there's no cmd/event specific
-        " triggers
-        if empty(l:spec.cmd) && empty(l:spec.event)
-          let l:init = 'let g:unpack_loader_' . s:rename(l:name) . '_init_status = 0'
-          call add(l:output.plugin.unpack, l:init)
+        if !unpack#solv#has_dependents(l:name, a:configuration)
+          let l:ft_code = s:gen_ft_item(l:name, a:configuration)
+          for [l:ft, l:code] in items(l:ft_code)
+            if has_key(l:output.ftplugin, l:ft)
+              call extend(l:output.ftplugin[l:ft], l:code)
+            else
+              let l:output.ftplugin[l:ft] = ['" autogenerated by unpack#compile()']
+              call extend(l:output.ftplugin[l:ft], l:code)
+            endif
+          endfor
+        else
+          let l:loader_code = s:gen_loader(a:name, a:configuration)
+          let l:loader_cmd = 'call unpack#loader#' . s:rename(l:name) . '()'
+          for l:ft in l:spec.ft
+            let l:output.groupdef = s:gen_aucmds(['Filetype', l:ft, l:loader_cmd])
+          endfor
         endif
       endif
     endif
