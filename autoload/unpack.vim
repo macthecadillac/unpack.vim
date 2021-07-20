@@ -61,88 +61,120 @@ function! unpack#end()
 endfunction
 
 function! s:lift_list(x)
-  if type(a:x) ==# 3
-    return a:x
+  if type(a:x) ==# 3  " list
+    return {'ok': v:true, 'val': a:x}
+  elseif type(a:x) ==# 1  " string
+    return {'ok': v:true, 'val': [a:x]}
   else
-    return [a:x]
+    return {'ok': v:false, 'msg': a:x . ' is not a list or string'}
   endif
 endfunction
 
-function! unpack#load(path, ...)
+function! s:check_init_status()
   if !exists('s:config_loaded')
     echohl ErrorMsg
     echom 'Package manager not initialized. Check your configuration. (Hint: did you call unpack#end?)'
     echohl None
-    finish
+    return v:false
+  else
+    return v:true
   endif
+endfunction
 
-  if a:0
-    let l:opts = a:1
-  else
-    let l:opts = s:default_package_options
-  endif
-  let l:name = s:extract_name(trim(a:path))
-  let l:full_path = s:get_full_path(a:path)
-  if l:name.ok && l:full_path.ok
-    let l:spec = extend(deepcopy(s:default_package_options), l:opts)
-    let l:spec.ft = s:lift_list(l:spec.ft)
-    let l:spec.cmd = s:lift_list(l:spec.cmd)
-    let l:spec.event = s:lift_list(l:spec.event)
-    let l:spec.requires = s:lift_list(l:spec.requires)
-    let l:spec.local = l:full_path.local
-    let l:spec.path = l:full_path.path
-    let s:configuration.packages[l:name.name] = l:spec
-  else
-    echohl ErrorMsg
-    if !l:name.ok
-      echom l:name.msg
+function! unpack#load(path, ...)
+  if s:check_init_status()
+    if a:0
+      let l:opts = a:1
     else
-      echom l:full_path.msg
+      let l:opts = s:default_package_options
     endif
-    echohl NONE
+    let l:name = s:extract_name(trim(a:path))
+    let l:full_path = s:get_full_path(a:path)
+    if l:name.ok && l:full_path.ok
+      let l:spec = extend(deepcopy(s:default_package_options), l:opts)
+      let l:ft = s:lift_list(l:spec.ft)
+      let l:cmd = s:lift_list(l:spec.cmd)
+      let l:event = s:lift_list(l:spec.event)
+      let l:requires = s:lift_list(l:spec.requires)
+      if l:ft.ok && l:cmd.ok && l:event.ok && l:requires.ok
+        let l:spec.ft = l:ft.val
+        let l:spec.cmd = l:cmd.val
+        let l:spec.event = l:event.val
+        let l:spec.requires = l:requires.val
+        let l:spec.local = l:full_path.local
+        let l:spec.path = l:full_path.path
+        let s:configuration.packages[l:name.name] = l:spec
+      else
+        echohl ErrorMsg
+        if !l:ft.ok
+          echom l:ft.msg
+        elseif !l:cmd.ok
+          echom l:cmd.msg
+        elseif !l:event.ok
+          echom l:event.msg
+        elseif !l:requires.ok
+          echom l:requires.msg
+        endif
+        echohl NONE
+        unlet s:config_loaded
+      endif
+    else
+      echohl ErrorMsg
+      if !l:name.ok
+        echom l:name.msg
+      else
+        echom l:full_path.msg
+      endif
+      echohl NONE
+      unlet s:config_loaded
+    endif
   endif
 endfunction
 
 function! unpack#compile()
-  let l:output = unpack#code#gen(s:configuration)
-  let l:config_path = unpack#platform#config_path()
-  if isdirectory(g:unpack#loader_path)  " remove previously generated loaders
-    call delete(g:unpack#loader_path, 'rf')
-  endif
-  call mkdir(g:unpack#loader_path, 'p')
+  if s:check_init_status()
+    let l:output = unpack#code#gen(s:configuration)
+    let l:config_path = unpack#platform#config_path()
+    if isdirectory(g:unpack#loader_path)  " remove previously generated loaders
+      call delete(g:unpack#loader_path, 'rf')
+    endif
+    call mkdir(g:unpack#loader_path, 'p')
 
-  if !empty(l:output.ftplugin)
-    let l:ftplugin = unpack#platform#join(g:unpack#loader_path, 'ftplugin')
-    call mkdir(l:ftplugin)
-    for [l:ft, l:ft_loader] in items(l:output.ftplugin)
-      call writefile(l:ft_loader, unpack#platform#join(l:ftplugin, l:ft . '.vim'))
-    endfor
-  endif
+    if !empty(l:output.ftplugin)
+      let l:ftplugin = unpack#platform#join(g:unpack#loader_path, 'ftplugin')
+      call mkdir(l:ftplugin)
+      for [l:ft, l:ft_loader] in items(l:output.ftplugin)
+        call writefile(l:ft_loader, unpack#platform#join(l:ftplugin, l:ft . '.vim'))
+      endfor
+    endif
 
-  if !empty(l:output.plugin.unpack)
-    let l:plugin = unpack#platform#join(g:unpack#loader_path, 'plugin')
-    call mkdir(l:plugin)
-    call writefile(l:output.plugin.unpack, unpack#platform#join(l:plugin, 'unpack.vim'))
-  endif
+    if !empty(l:output.plugin.unpack)
+      let l:plugin = unpack#platform#join(g:unpack#loader_path, 'plugin')
+      call mkdir(l:plugin)
+      call writefile(l:output.plugin.unpack, unpack#platform#join(l:plugin, 'unpack.vim'))
+    endif
 
-  if !empty(l:output.autoload.unpack.loader)
-    let l:autoload = unpack#platform#join(g:unpack#loader_path, 'autoload', 'unpack')
-    call mkdir(l:autoload, 'p')
-    call writefile(l:output.autoload.unpack.loader, unpack#platform#join(l:autoload, 'loader.vim'))
+    if !empty(l:output.autoload.unpack.loader)
+      let l:autoload = unpack#platform#join(g:unpack#loader_path, 'autoload', 'unpack')
+      call mkdir(l:autoload, 'p')
+      call writefile(l:output.autoload.unpack.loader, unpack#platform#join(l:autoload, 'loader.vim'))
+    endif
   endif
 endfunction
 
 function! unpack#write()
-  let l:opt_packages = unpack#platform#ls(unpack#platform#opt_path())
-  let l:start_packages = unpack#platform#ls(unpack#platform#start_path())
-  for [l:package, l:spec] in items(s:configuration.packages)
-    if s:is_member(l:package, l:opt_packages) && !unpack#solv#is_optional(l:package, s:configuration)
-      call s:make_mandatory(l:package)
-    elseif s:is_member(l:package, l:start_packages) && unpack#solv#is_optional(l:package, s:configuration)
-      call s:make_optional(l:package)
-    endif
-  endfor
-  call unpack#compile()
+  if s:check_init_status()
+    let l:opt_packages = unpack#platform#ls(unpack#platform#opt_path())
+    let l:start_packages = unpack#platform#ls(unpack#platform#start_path())
+    for [l:package, l:spec] in items(s:configuration.packages)
+      if s:is_member(l:package, l:opt_packages) && !unpack#solv#is_optional(l:package, s:configuration)
+        call s:make_mandatory(l:package)
+      elseif s:is_member(l:package, l:start_packages) && unpack#solv#is_optional(l:package, s:configuration)
+        call s:make_optional(l:package)
+      endif
+    endfor
+    call unpack#compile()
+  endif
 endfunction
 
 function! s:is_member(item, list)
@@ -256,16 +288,20 @@ endfunction
 " FIXME: might be creating links within local repos
 " TODO: auto load plugins after installation
 function! unpack#install(...)
-  call unpack#ui#new_window()
-  call s:for_each_package_do(function('s:install'), a:000)
+  if s:check_init_status()
+    call unpack#ui#new_window()
+    call s:for_each_package_do(function('s:install'), a:000)
+  endif
 endfunction
 
 " FIXME: check that the function does what is intended
 function! unpack#clean()
-  let l:opt_dir = unpack#platform#opt_path()
-  let l:start_dir = unpack#platform#start_path()
-  call s:remove_package_if_not_in_list(l:opt_dir)
-  call s:remove_package_if_not_in_list(l:start_dir)
+  if s:check_init_status()
+    let l:opt_dir = unpack#platform#opt_path()
+    let l:start_dir = unpack#platform#start_path()
+    call s:remove_package_if_not_in_list(l:opt_dir)
+    call s:remove_package_if_not_in_list(l:start_dir)
+  endif
 endfunction
 
 function! s:remove_package_if_not_in_list(base_path)
@@ -280,8 +316,10 @@ endfunction
 
 " TODO: auto reload plugins after installation
 function! unpack#update(...)
-  call unpack#ui#new_window()
-  call s:for_each_package_do(function('s:fetch'), a:000)
+  if s:check_init_status()
+    call unpack#ui#new_window()
+    call s:for_each_package_do(function('s:fetch'), a:000)
+  endif
 endfunction
 
 function! s:extract_name(path)
@@ -289,15 +327,15 @@ function! s:extract_name(path)
     if stridx(a:path, 'http:') ==# 0 || stridx(a:path, 'https:') ==# 0 || stridx(a:path, 'git@') ==# 0
       let repo = split(a:path, '/')[-1]
       if repo[-4:] ==# '.git'
-        return {'ok': 1, 'name': repo[:-4]}
+        return {'ok': v:true, 'name': repo[:-4]}
       else
-        return {'ok': 0, 'path': a:path, 'msg': 'not a valid git repo'}
+        return {'ok': v:false, 'path': a:path, 'msg': 'not a valid git repo'}
       endif
     else  " not a url
-      return {'ok': 1, 'name': split(a:path, '/')[-1]}
+      return {'ok': v:true, 'name': split(a:path, '/')[-1]}
     endif
   else
-    return {'ok': 0, 'path': a:path, 'msg': 'not a valid entry'}
+    return {'ok': v:false, 'path': a:path, 'msg': 'not a valid entry'}
   endif
 endfunction
 
@@ -307,14 +345,14 @@ function! s:get_full_path(path)
   elseif count(a:path, '/') > 1
     if stridx(a:path, 'http:') ==# 1 || stridx(a:path, 'https:') ==# 1
       if a:path[-4] ==# '.git'
-        return {'ok': 1, 'local': 0, 'path': a:path}
+        return {'ok': v:true, 'local': v:false, 'path': a:path}
       else
-        return {'ok': 0, 'path': a:path, 'msg': 'not a valid git repo'}
+        return {'ok': v:false, 'path': a:path, 'msg': 'not a valid git repo'}
       endif
     else
-      return {'ok': 1, 'local': 1, 'path': a:path}
+      return {'ok': v:true, 'local': v:true, 'path': a:path}
     endif
   else
-    return {'ok': 0, 'path': a:path, 'msg': 'not a valid entry'}
+    return {'ok': v:false, 'path': a:path, 'msg': 'not a valid entry'}
   endif
 endfunction
