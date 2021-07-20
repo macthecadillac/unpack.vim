@@ -29,7 +29,6 @@ function! unpack#ui#new_window()
           \ 'focusable': v:true,
           \ }
     let s:win_id = nvim_open_win(s:buf_id, v:true, l:opts)
-    call nvim_set_current_win(s:win_id)
   endif
 endfunction
 

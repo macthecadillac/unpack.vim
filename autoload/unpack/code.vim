@@ -99,6 +99,10 @@ function! s:needs_loader(name, config)
   return l:spec['post'] !=# '' || l:spec['pre'] !=# '' || unpack#solv#is_optional(a:name, a:config)
 endfunction
 
+" FIXME: make function for start packages with post commands and call them at
+" the beginning to bypass problems because of vim initialization order
+" TODO: split loader into one loader per file to speed up post initialization
+" for start packages
 function! unpack#code#gen(configuration)
   let l:output = {
         \   'plugin': { 'unpack': [] },
@@ -144,12 +148,6 @@ function! unpack#code#gen(configuration)
     endif
   endfor
   call add(l:groupdef, 'augroup END')
-  call add(l:output.plugin.unpack, '" place-holder to bypass calling unpack')
-  call add(l:output.plugin.unpack, 'function! unpack#begin()')
-  call add(l:output.plugin.unpack, 'endfunction')
-  call add(l:output.plugin.unpack, 'function! unpack#end()')
-  call add(l:output.plugin.unpack, 'endfunction')
-  call add(l:output.plugin.unpack, 'command! -nargs=+ Unpack echo ""')
   if len(l:groupdef) > 3
     call extend(l:output.plugin.unpack, l:groupdef)
   endif

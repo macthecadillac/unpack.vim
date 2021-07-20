@@ -1,9 +1,27 @@
-" FIXME: check every dictionary indexing and insert error handler for the
+" TODO: accept commands as well as lambdas (as a string literal) for
+" `post-install`, `pre`, and `post`
+" TODO: make command for creating funtions in the loader (something like
+" UnpackDef ['x', 'y'] ['return a:x + a:y'] with the first array being the list
+" of arguments and the second being a list of statements in sequence which will
+" then be compiled into an actual vim function in the loader
+" TODO: check every dictionary indexing and insert error handler for the
 " configuration processing step since users might put in undefined keys
+" TODO: either find a workaround for predefining dummy commands/functions and
+" have vim load the loader before sourcing the package def sections or simply
+" rename the generated plugin into something that doesn't share the `unpack`
+" namespace
+if !(v:version >= 800 || has('nvim'))
+  echohl ErrorMsg
+  echom 'Unpack requires neovim or vim version 8 or above'
+  echohl NONE
+  finish
+endif
+
 if exists('s:config_loaded')
   finish
 endif
 
+let g:unpack#jobs = {}
 let g:unpack#packpath = unpack#platform#config_path()
 let s:config_loaded = v:false
 let s:default_loader_path = unpack#platform#join(unpack#platform#config_path(), 'unpack')
@@ -42,6 +60,14 @@ function! unpack#end()
   let g:unpack#config_changed = v:true
 endfunction
 
+function! s:lift_list(x)
+  if type(a:x) ==# 3
+    return a:x
+  else
+    return [a:x]
+  endif
+endfunction
+
 function! unpack#load(path, ...)
   if !exists('s:config_loaded')
     echohl ErrorMsg
@@ -59,6 +85,10 @@ function! unpack#load(path, ...)
   let l:full_path = s:get_full_path(a:path)
   if l:name.ok && l:full_path.ok
     let l:spec = extend(deepcopy(s:default_package_options), l:opts)
+    let l:spec.ft = s:lift_list(l:spec.ft)
+    let l:spec.cmd = s:lift_list(l:spec.cmd)
+    let l:spec.event = s:lift_list(l:spec.event)
+    let l:spec.requires = s:lift_list(l:spec.requires)
     let l:spec.local = l:full_path.local
     let l:spec.path = l:full_path.path
     let s:configuration.packages[l:name.name] = l:spec
@@ -221,11 +251,16 @@ function! s:install(name)
   endif
 endfunction
 
+" FIXME: the 'commit' flag is not applied
+" FIXME: empty configuration should still get to the quit prompt
+" FIXME: might be creating links within local repos
+" TODO: auto load plugins after installation
 function! unpack#install(...)
   call unpack#ui#new_window()
   call s:for_each_package_do(function('s:install'), a:000)
 endfunction
 
+" FIXME: check that the function does what is intended
 function! unpack#clean()
   let l:opt_dir = unpack#platform#opt_path()
   let l:start_dir = unpack#platform#start_path()
@@ -243,6 +278,7 @@ function! s:remove_package_if_not_in_list(base_path)
   endfor
 endfunction
 
+" TODO: auto reload plugins after installation
 function! unpack#update(...)
   call unpack#ui#new_window()
   call s:for_each_package_do(function('s:fetch'), a:000)
