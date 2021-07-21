@@ -8,17 +8,17 @@ function! s:gen_aucmds(defs)
   return l:output
 endfunction
 
-function! s:gen_pre_post(cmd, ...)
+function! s:gen_pre_post(cmds, ...)
   let l:padding = a:0 ? repeat(' ', a:1) : ''
-  if a:cmd ==# ''
-    return []
-  else
-    if stridx(a:cmd, '"')
-      return [l:padding . "execute '" . a:cmd . "'"]
+  let l:output = []
+  for l:cmd in a:cmds
+    if stridx(l:cmd, '"')
+      call add(l:output, l:padding . "execute '" . l:cmd . "'")
     else
-      return [l:padding . 'execute "' . a:cmd . '"']
+      call add(l:output, l:padding . 'execute "' . l:cmd . '"')
     endif
-  endif
+  endfor
+  return l:output
 endfunction
 
 " rename package names that contain '.' and '-' to '_'
@@ -34,8 +34,14 @@ function! s:gen_optional_loader(name, configuration)
   call add(l:output,   "  if !get(g:, 'unpack_loader_" . l:name . "_init_status', v:false)")
   call add(l:output, "    let g:unpack_loader_" . l:name . "_init_status = v:true")
   for l:dep in l:spec.requires
-    if unpack#solv#is_optional(a:name, a:configuration)
-      call add(l:output, '    call unpack#loader#' . s:rename(l:dep) . '()')
+    if has_key(a:configuration.packages, l:dep)
+      if unpack#solv#is_optional(a:name, a:configuration)
+        call add(l:output, '    call unpack#loader#' . s:rename(l:dep) . '()')
+      endif
+    else
+      echohl ErrorMsg
+      echom "Requires: '" . l:dep . "' is not a known package"
+      echohl NONE
     endif
   endfor
   call extend(l:output, s:gen_pre_post(l:spec['pre'], 4))
@@ -96,7 +102,7 @@ endfunction
 
 function! s:needs_loader(name, config)
   let l:spec = a:config.packages[a:name]
-  return l:spec['post'] !=# '' || l:spec['pre'] !=# '' || unpack#solv#is_optional(a:name, a:config)
+  return !empty(l:spec.post) || !empty(l:spec.pre) || unpack#solv#is_optional(a:name, a:config)
 endfunction
 
 " FIXME: make function for start packages with post commands and call them at

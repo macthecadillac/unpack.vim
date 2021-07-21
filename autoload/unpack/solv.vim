@@ -1,7 +1,7 @@
 function! unpack#solv#is_optional(name, config)
   let l:spec = a:config.packages[a:name]
   let l:graphs = unpack#solv#nodes(a:config)
-  if !empty(l:spec.ft) || !empty(l:spec.cmd) || !empty(l:spec.event) || l:spec['pre'] !=# '' || l:spec.opt
+  if !empty(l:spec.ft) || !empty(l:spec.cmd) || !empty(l:spec.event) || !empty(l:spec.pre) || l:spec.opt
     for l:dependent in keys(l:graphs[a:name].dependents)
       if !unpack#solv#is_optional(l:dependent, a:config)
         return v:false

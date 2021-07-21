@@ -1,11 +1,7 @@
-" TODO: accept commands as well as lambdas (as a string literal) for
-" `post-install`, `pre`, and `post`
 " TODO: make command for creating funtions in the loader (something like
 " UnpackDef ['x', 'y'] ['return a:x + a:y'] with the first array being the list
 " of arguments and the second being a list of statements in sequence which will
-" then be compiled into an actual vim function in the loader
-" TODO: check every dictionary indexing and insert error handler for the
-" configuration processing step since users might put in undefined keys
+" then be compiled into an actual vim function in the loader (maybe?)
 " TODO: either find a workaround for predefining dummy commands/functions and
 " have vim load the loader before sourcing the package def sections or simply
 " rename the generated plugin into something that doesn't share the `unpack`
@@ -40,10 +36,10 @@ let s:default_package_options = {
       \   'event': [],
       \   'branch': '',
       \   'commit': '',
-      \   'post-install': '',
+      \   'post-install': [],
       \   'local': v:false,
-      \   'pre': '',
-      \   'post': '',
+      \   'pre': [],
+      \   'post': [],
       \   'requires': [],
       \ }
 
@@ -96,11 +92,25 @@ function! unpack#load(path, ...)
       let l:cmd = s:lift_list(l:spec.cmd)
       let l:event = s:lift_list(l:spec.event)
       let l:requires = s:lift_list(l:spec.requires)
-      if l:ft.ok && l:cmd.ok && l:event.ok && l:requires.ok
+      let l:post_install = s:lift_list(l:spec['post-install'])
+      let l:pre = s:lift_list(l:spec.pre)
+      let l:post = s:lift_list(l:spec.post)
+      if l:ft.ok
+       \ && l:cmd.ok
+       \ && l:event.ok
+       \ && l:requires.ok
+       \ && l:post_install.ok
+       \ && l:pre.ok
+       \ && l:post.ok
+       \ && type(l:spec.branch) ==# 1
+       \ && type(l:spec.commit) ==# 1
         let l:spec.ft = l:ft.val
         let l:spec.cmd = l:cmd.val
         let l:spec.event = l:event.val
         let l:spec.requires = l:requires.val
+        let l:spec['post-install'] = l:post_install.val
+        let l:spec.pre = l:pre.val
+        let l:spec.post = l:post.val
         let l:spec.local = l:full_path.local
         let l:spec.path = l:full_path.path
         let s:configuration.packages[l:name.name] = l:spec
@@ -114,6 +124,16 @@ function! unpack#load(path, ...)
           echom l:event.msg
         elseif !l:requires.ok
           echom l:requires.msg
+        elseif !l:post_install.ok
+          echom l:post_install.msg
+        elseif !l:pre.ok
+          echom l:pre.msg
+        elseif !l:post.ok
+          echom l:post.msg
+        elseif type(l:spec.branch) !=# 1
+          echom 'branch needs to be a string'
+        elseif type(l:spec.commit) !=# 1
+          echom 'commit needs to be a string'
         endif
         echohl NONE
         unlet s:config_loaded
