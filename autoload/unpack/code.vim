@@ -144,11 +144,9 @@ function! unpack#code#gen(configuration)
             endif
           endfor
         else
-          let l:loader_code = s:gen_loader(a:name, a:configuration)
+          let l:loader_code = s:gen_loader(l:name, a:configuration)
           let l:loader_cmd = 'call unpack#loader#' . s:rename(l:name) . '()'
-          for l:ft in l:spec.ft
-            let l:output.groupdef = s:gen_aucmds(['Filetype', l:ft, l:loader_cmd])
-          endfor
+          let l:output.groupdef = s:gen_aucmds([['Filetype', l:spec.ft, l:loader_cmd]])
         endif
       endif
     endif
