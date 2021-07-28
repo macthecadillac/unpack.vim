@@ -151,6 +151,7 @@ function! unpack#load(path, ...)
   endif
 endfunction
 
+" TODO: auto load compiled plugin after compilation
 function! unpack#compile()
   if s:check_init_status()
     let l:output = unpack#code#gen(s:configuration)
@@ -255,7 +256,7 @@ function! s:fetch(name)
   let l:dir = unpack#solv#is_optional(a:name, s:configuration) ?
         \ unpack#platform#opt_path() : unpack#platform#start_path()
   let l:Update = function('unpack#ui#update')
-  let l:cmd = ['git', '-C', unpack#platform#join(l:dir, a:name), 'fetch']
+  let l:cmd = ['git', '-C', unpack#platform#join(l:dir, a:name), 'pull', '--ff']
   " TODO: only run post-install if something changed
   call unpack#job#start(a:name, l:cmd, {->0}, l:Update, l:spec['post-install'])
 endfunction
