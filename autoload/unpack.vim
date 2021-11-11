@@ -312,6 +312,7 @@ function! unpack#install(...)
   if s:check_init_status()
     call unpack#ui#new_window()
     call s:for_each_package_do(function('s:install'), a:000)
+    execute "helptags ALL"
   endif
 endfunction
 
@@ -322,6 +323,7 @@ function! unpack#clean()
     let l:start_dir = unpack#platform#start_path()
     call s:remove_package_if_not_in_list(l:opt_dir)
     call s:remove_package_if_not_in_list(l:start_dir)
+    execute "helptags ALL"
   endif
 endfunction
 
@@ -340,6 +342,7 @@ function! unpack#update(...)
   if s:check_init_status()
     call unpack#ui#new_window()
     call s:for_each_package_do(function('s:fetch'), a:000)
+    execute "helptags ALL"
   endif
 endfunction
 
