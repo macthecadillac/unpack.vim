@@ -267,13 +267,13 @@ endfunction
 
 function! s:for_each_package_do(f, names)
   if len(a:names) >= 1  " user specified packages to perform action
-    let l:error = 0
+    let l:error = v:false
     for l:name in a:names
       if !has_key(s:configuration.packages, l:name)
         echohl ErrorMsg
         echom l:name . ' is not a known package.'
         echohl NONE
-        let l:error = 1
+        let l:error = v:true
         break
       endif
     endfor
@@ -298,7 +298,7 @@ function! s:install(name)
     else
       let l:install_path = unpack#platform#start_path()
     endif
-    call unpack#platform#ln(l:spec.path, unpack#platform#join(l:install_path, a:name))
+    call unpack#platform#ln(l:spec.path, l:install_path)
   else
     call s:clone(a:name)
   endif
@@ -306,8 +306,8 @@ endfunction
 
 " FIXME: the 'commit' flag is not applied
 " FIXME: empty configuration should still get to the quit prompt
-" FIXME: might be creating links within local repos
 " TODO: auto load plugins after installation
+" TODO: show progress for local plugins as well
 function! unpack#install(...)
   if s:check_init_status()
     call unpack#ui#new_window()
@@ -337,6 +337,7 @@ function! s:remove_package_if_not_in_list(base_path)
   endfor
 endfunction
 
+" FIXME: only update non-local packages
 " TODO: auto reload plugins after installation
 function! unpack#update(...)
   if s:check_init_status()
