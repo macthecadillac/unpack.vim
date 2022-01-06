@@ -42,11 +42,12 @@ function! unpack#job#start(name, cmd, out_cb, err_cb, exit_cb)
     finish
   endif
   call unpack#ui#incr_cnt()
+  call unpack#ui#update(l:state.line_offset, l:state.name, [''])
 endfunction
 
 function! s:vim_stdout(channel, data)
   let l:job = g:unpack#jobs[a:job_id]
-  call l:job.out_cb(a:data)
+  call l:job.out_cb(l:job.line_offset, l:job.name, a:data)
   call add(l:job.stdout, a:data)
 endfunction
 
@@ -63,7 +64,7 @@ endfunction
 
 function! s:nvim_stdout(job_id, data, event) dict
   let l:job = g:unpack#jobs[a:job_id]
-  call l:job.out_cb(a:data)
+  call l:job.out_cb(l:job.line_offset, l:job.name, a:data)
   call add(l:job.stdout, a:data)
 endfunction
 

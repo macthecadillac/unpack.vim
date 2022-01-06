@@ -233,20 +233,20 @@ function! s:clone(name)
     let l:Update = function('unpack#ui#update')
     if empty(l:spec.branch) && empty(l:spec.commit)
       let l:cmd = ['git', '-C', l:dir, 'clone', l:spec.path]
-      call unpack#job#start(a:name, l:cmd, {->0}, l:Update, l:spec['post-install'])
+      call unpack#job#start(a:name, l:cmd, l:Update, l:Update, l:spec['post-install'])
     elseif !empty(l:spec.commit) && !empty(l:spec.branch)
       let l:cmd1 = ['git', '-C', l:dir, 'clone', '-b', l:spec.branch, l:spec.path]
       let l:cmd2 = ['git', '-C', unpack#platform#join(l:dir, a:name), 'checkout', l:spec.commit]
-      call unpack#job#start(a:name, l:cmd1, {->0}, l:Update, {->
-         \ unpack#job#start(a:name, l:cmd2, {->0}, l:Update, l:spec['post-install'])})
+      call unpack#job#start(a:name, l:cmd1, l:Update, l:Update, {->
+         \ unpack#job#start(a:name, l:cmd2, l:Update, l:Update, l:spec['post-install'])})
     elseif !empty(l:spec.commit)
       let l:cmd1 = ['git', '-C', l:dir, 'clone', l:spec.path]
       let l:cmd2 = ['git', '-C', unpack#platform#join(l:dir, a:name), 'checkout', l:spec.commit]
-      call unpack#job#start(a:name, l:cmd1, {->0}, l:Update, {->
-         \ unpack#job#start(a:name, l:cmd2, {->0}, l:Update, l:spec['post-install'])})
+      call unpack#job#start(a:name, l:cmd1, l:Update, l:Update, {->
+         \ unpack#job#start(a:name, l:cmd2, l:Update, l:Update, l:spec['post-install'])})
     else
       let l:cmd = ['git', '-C', l:dir, 'clone', '-b', l:spec.branch, l:spec.path]
-      call unpack#job#start(a:name, l:cmd, {->0}, l:Update, l:spec['post-install'])
+      call unpack#job#start(a:name, l:cmd, l:Update, l:Update, l:spec['post-install'])
     endif
   endif
 endfunction
@@ -259,7 +259,7 @@ function! s:fetch(name)
   let l:Update = function('unpack#ui#update')
   let l:cmd = ['git', '-C', unpack#platform#join(l:dir, a:name), 'pull', '--ff']
   " TODO: only run post-install if something changed
-  call unpack#job#start(a:name, l:cmd, {->0}, l:Update, l:spec['post-install'])
+  call unpack#job#start(a:name, l:cmd, l:Update, l:Update, l:spec['post-install'])
 endfunction
 
 function! unpack#list(text, ...)
