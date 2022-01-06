@@ -9,6 +9,7 @@ function! unpack#ui#update(offset, name, text)
   endif
   call nvim_buf_set_lines(s:buf_id, l:offset - 1, l:offset, v:true, s:format(a:name, a:text))
   set nomodifiable
+  call nvim_win_set_cursor(s:win_id, [3, 3])
 endfunction
 
 function! unpack#ui#new_window()
@@ -34,15 +35,17 @@ endfunction
 
 function! unpack#ui#close_window()
   call nvim_win_close(s:win_id, v:true)
-  call nvim_buf_delete(s:buf_id, {'force': v:true})
+  call execute(['bwipeout', s:buf_id])
   unlet s:win_id
   unlet s:buf_id
+  " clear commandline
+  echom ''
 endfunction
 
 function! unpack#ui#prepare_to_exit()
   let l:line_count = nvim_buf_line_count(s:buf_id)
   call nvim_set_current_buf(s:buf_id)
-  nmap <buffer> q :q<CR>
+  nmap <buffer> q :call unpack#ui#close_window()<CR>
   set modifiable
   call nvim_buf_set_lines(s:buf_id, l:line_count, l:line_count, v:true, ['', '   Press q to exit'])
   set nomodifiable
