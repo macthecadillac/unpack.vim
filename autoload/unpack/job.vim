@@ -1,3 +1,5 @@
+" TODO: should probably switch to dictionary functions to avoid script-global
+" vars
 let s:line_offset = 0
 
 function! unpack#job#start(name, cmd, out_cb, err_cb, exit_cb)
@@ -39,6 +41,7 @@ function! unpack#job#start(name, cmd, out_cb, err_cb, exit_cb)
     echohl NONE
     finish
   endif
+  call unpack#ui#incr_cnt()
 endfunction
 
 function! s:vim_stdout(channel, data)
@@ -77,8 +80,10 @@ function! s:nvim_job_exit(job_id, data, event) dict
     call l:job.exit_cb()
   endif
   call unpack#ui#update(l:job.line_offset, l:job.name, ['Done'])
+  call unpack#ui#update_progress_bar()
   unlet g:unpack#jobs[a:job_id]
   if empty(g:unpack#jobs)
     call unpack#ui#prepare_to_exit()
+    let s:line_offset = 0
   endif
 endfunction

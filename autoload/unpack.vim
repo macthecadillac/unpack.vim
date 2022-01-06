@@ -6,6 +6,7 @@
 " have vim load the loader before sourcing the package def sections or simply
 " rename the generated plugin into something that doesn't share the `unpack`
 " namespace
+" TODO: Block commands if there is already one under execution
 if !(v:version >= 800 || has('nvim'))
   echohl ErrorMsg
   echom 'Unpack requires neovim or vim version 8 or above'
