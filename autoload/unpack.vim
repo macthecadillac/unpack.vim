@@ -175,7 +175,6 @@ function! unpack#load(path, ...)
   endif
 endfunction
 
-" TODO: auto load compiled plugin after compilation
 function! unpack#compile()
   if s:check_init_status()
     let l:output = unpack#code#gen(s:configuration)
@@ -196,7 +195,9 @@ function! unpack#compile()
     if !empty(l:output.plugin.unpack)
       let l:plugin = unpack#platform#join(g:unpack#loader_path, 'plugin')
       call mkdir(l:plugin)
-      call writefile(l:output.plugin.unpack, unpack#platform#join(l:plugin, 'unpack.vim'))
+      let l:plugin_path = unpack#platform#join(l:plugin, 'unpack.vim')
+      call writefile(l:output.plugin.unpack, l:plugin_path)
+      execute 'source ' . l:plugin_path
     endif
 
     if !empty(l:output.autoload.unpack.loader)
