@@ -63,8 +63,31 @@ function! s:lift_list(x)
   elseif type(a:x) ==# 1  " string
     return {'ok': v:true, 'val': [a:x]}
   else
-    return {'ok': v:false, 'msg': a:x . ' is not a list or string'}
+    return {'ok': v:false, 'msg': 'not a list or string. See documentation.'}
   endif
+endfunction
+
+function! s:lift_fun(x)
+  if type(a:x) ==# 2  " funref
+    return {'ok': v:true, 'val': a:x}
+  elseif type(a:x) ==# 1  " supposedly a command
+    return {'ok': v:true, 'val': {-> execute(a:x)}}
+  elseif type(a:x) ==# 3  " list
+    for l:item in a:x
+      if type(l:item) !=# 1
+        return {'ok': v:false, 'msg': 'not a Funref, string, or a list of strings. See documentation.'}
+      endif
+    endfor
+    return {'ok': v:true, 'val': {-> s:exe_cmd_list(a:x)}}
+  else
+    return {'ok': v:false, 'msg': 'not a Funref, string, or a list of strings. See documentation.'}
+  endif
+endfunction
+
+function! s:exe_cmd_list(l)
+  for l:cmd in a:l
+    execute l:cmd
+  endfor
 endfunction
 
 function! s:check_init_status()
@@ -93,7 +116,7 @@ function! unpack#load(path, ...)
       let l:cmd = s:lift_list(l:spec.cmd)
       let l:event = s:lift_list(l:spec.event)
       let l:requires = s:lift_list(l:spec.requires)
-      let l:post_install = s:lift_list(l:spec['post-install'])
+      let l:post_install = s:lift_fun(l:spec['post-install'])
       let l:pre = s:lift_list(l:spec.pre)
       let l:post = s:lift_list(l:spec.post)
       if l:ft.ok
@@ -118,23 +141,23 @@ function! unpack#load(path, ...)
       else
         echohl ErrorMsg
         if !l:ft.ok
-          echom l:ft.msg
+          echom l:name . '-' . 'ft: ' . l:ft.msg
         elseif !l:cmd.ok
-          echom l:cmd.msg
+          echom l:name . '-' . 'cmd: ' . l:cmd.msg
         elseif !l:event.ok
-          echom l:event.msg
+          echom l:name . '-' . 'event: ' . l:event.msg
         elseif !l:requires.ok
-          echom l:requires.msg
+          echom l:name . '-' . 'requires: ' . l:requires.msg
         elseif !l:post_install.ok
-          echom l:post_install.msg
+          echom l:name . '-' . 'post-install: ' . l:post_install.msg
         elseif !l:pre.ok
-          echom l:pre.msg
+          echom l:name . '-' . 'pre: ' . l:pre.msg
         elseif !l:post.ok
-          echom l:post.msg
+          echom l:name . '-' . 'post: ' . l:post.msg
         elseif type(l:spec.branch) !=# 1
-          echom 'branch needs to be a string'
+          echom l:name . ': ' . 'branch needs to be a string'
         elseif type(l:spec.commit) !=# 1
-          echom 'commit needs to be a string'
+          echom l:name . ': ' . 'commit needs to be a string'
         endif
         echohl NONE
         unlet s:config_loaded
@@ -142,9 +165,9 @@ function! unpack#load(path, ...)
     else
       echohl ErrorMsg
       if !l:name.ok
-        echom l:name.msg
+        echom a:path . ': ' . l:name.msg
       else
-        echom l:full_path.msg
+        echom a:path . ': ' . l:full_path.msg
       endif
       echohl NONE
       unlet s:config_loaded
@@ -230,23 +253,22 @@ function! s:clone(name)
     if !(isdirectory(l:dir))
       call mkdir(l:dir, 'p')
     endif
-    let l:Update = function('unpack#ui#update')
     if empty(l:spec.branch) && empty(l:spec.commit)
       let l:cmd = ['git', '-C', l:dir, 'clone', l:spec.path]
-      call unpack#job#start(a:name, l:cmd, l:Update, l:Update, l:spec['post-install'])
+      call unpack#job#start(a:name, l:cmd, l:spec['post-install'])
     elseif !empty(l:spec.commit) && !empty(l:spec.branch)
       let l:cmd1 = ['git', '-C', l:dir, 'clone', '-b', l:spec.branch, l:spec.path]
       let l:cmd2 = ['git', '-C', unpack#platform#join(l:dir, a:name), 'checkout', l:spec.commit]
-      call unpack#job#start(a:name, l:cmd1, l:Update, l:Update, {->
-         \ unpack#job#start(a:name, l:cmd2, l:Update, l:Update, l:spec['post-install'])})
+      call unpack#job#start(a:name, l:cmd1, {->
+         \ unpack#job#start(a:name, l:cmd2, l:spec['post-install'])})
     elseif !empty(l:spec.commit)
       let l:cmd1 = ['git', '-C', l:dir, 'clone', l:spec.path]
       let l:cmd2 = ['git', '-C', unpack#platform#join(l:dir, a:name), 'checkout', l:spec.commit]
-      call unpack#job#start(a:name, l:cmd1, l:Update, l:Update, {->
-         \ unpack#job#start(a:name, l:cmd2, l:Update, l:Update, l:spec['post-install'])})
+      call unpack#job#start(a:name, l:cmd1, {->
+         \ unpack#job#start(a:name, l:cmd2, l:spec['post-install'])})
     else
       let l:cmd = ['git', '-C', l:dir, 'clone', '-b', l:spec.branch, l:spec.path]
-      call unpack#job#start(a:name, l:cmd, l:Update, l:Update, l:spec['post-install'])
+      call unpack#job#start(a:name, l:cmd, l:spec['post-install'])
     endif
   endif
 endfunction
@@ -256,10 +278,9 @@ function! s:fetch(name)
   let l:spec = s:configuration.packages[a:name]
   let l:dir = unpack#solv#is_optional(a:name, s:configuration) ?
         \ unpack#platform#opt_path() : unpack#platform#start_path()
-  let l:Update = function('unpack#ui#update')
   let l:cmd = ['git', '-C', unpack#platform#join(l:dir, a:name), 'pull', '--ff']
   " TODO: only run post-install if something changed
-  call unpack#job#start(a:name, l:cmd, l:Update, l:Update, l:spec['post-install'])
+  call unpack#job#start(a:name, l:cmd, l:spec['post-install'])
 endfunction
 
 function! unpack#list(text, ...)
