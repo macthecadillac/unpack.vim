@@ -59,7 +59,6 @@ function! unpack#ui#new_window()
 endfunction
 
 function! unpack#ui#close_window()
-  call nvim_win_close(s:win_id, v:true)
   call execute(['bwipeout', s:buf_id])
   unlet s:win_id
   unlet s:buf_id
