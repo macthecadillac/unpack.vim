@@ -7,6 +7,9 @@
 " rename the generated plugin into something that doesn't share the `unpack`
 " namespace
 " TODO: Block commands if there is already one under execution
+" FIXME: separate ui and jobs and turn over ui control to callers
+" FIXME: related to the above: no window if the job list is empty (esp for
+" install)
 if !(v:version >= 800 || has('nvim'))
   echohl ErrorMsg
   echom 'Unpack requires neovim or vim version 8 or above'
@@ -52,6 +55,7 @@ function! unpack#begin(...)
   endif
 endfunction
 
+" FIXME: check for unmet dependencies
 function! unpack#end()
   let s:config_loaded = v:true
   let g:unpack#config_changed = v:true
@@ -328,14 +332,17 @@ function! s:install(name)
 endfunction
 
 " FIXME: the 'commit' flag is not applied
-" FIXME: empty configuration should still get to the quit prompt
 " TODO: auto load plugins after installation
 " TODO: show progress for local plugins as well
 function! unpack#install(...)
   if s:check_init_status()
-    call unpack#ui#new_window()
-    call s:for_each_package_do(function('s:install'), a:000)
-    execute "helptags ALL"
+    if len(a:000) >= 1 || len(s:configuration.packages) >= 1
+      call unpack#ui#new_window()
+      call s:for_each_package_do(function('s:install'), a:000)
+      execute "helptags ALL"
+    else
+      echom 'Nothing to do.'
+    endif
   endif
 endfunction
 
@@ -361,6 +368,7 @@ function! s:remove_package_if_not_in_list(base_path)
 endfunction
 
 " FIXME: only update non-local packages
+" FIXME: don't fetch if there's a commit specified
 " TODO: auto reload plugins after installation
 function! unpack#update(...)
   if s:check_init_status()
