@@ -42,6 +42,20 @@ Neovim/Vim with `pack-add`
 
 ## Bootstrapping
 
+## Usage
+
+The following commands are available:
+
+`UnpackInstall`
+
+`UnpackClean`
+
+`UnpackCompile`
+
+`UnpackWrite`
+
+`UnpackUpdate`
+
 ## Configuration
 
 ## Benchmarks (of sorts)
