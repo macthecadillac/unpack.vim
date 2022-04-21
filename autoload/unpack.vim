@@ -10,6 +10,8 @@
 " FIXME: separate ui and jobs and turn over ui control to callers
 " FIXME: related to the above: no window if the job list is empty (esp for
 " install)
+" FIXME: reload configuration everytime an unpack command is called
+" FIXME: UnpackClean should show ui prompt
 if !(v:version >= 800 || has('nvim'))
   echohl ErrorMsg
   echom 'Unpack requires neovim or vim version 8 or above'
